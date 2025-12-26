@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hearing Assessment System Mock</title>
+</head>
+<body>
+    <h1>Login</h1>
+    <form id="login-form" onsubmit="document.getElementById('main-form').style.display='block'; document.getElementById('login-form').style.display='none'; return false;">
+        <label>Username: <input type="text" name="username" id="username"></label><br>
+        <label>Password: <input type="password" name="password" id="password"></label><br>
+        <button type="submit" id="login-btn">Login</button>
+    </form>
+
+    <div id="main-form" style="display:none; margin-top: 20px; border-top: 1px solid black;">
+        <h1>Assessment Data</h1>
+
+        <!-- Basic -->
+        <label>Inspector Name: <input type="text" id="InspectorName"></label><br>
+
+        <label>Test Date:</label>
+        <select name="TestDateY"><option value="">Y</option><option value="2023">2023</option><option value="2024">2024</option></select>
+        <select name="TestDateM"><option value="">M</option><option value="11">11</option><option value="12">12</option></select>
+        <select name="TestDateD"><option value="">D</option><option value="15">15</option><option value="16">16</option></select>
+        <br>
+
+        <!-- Otoscopy Left -->
+        <h3>Otoscopy Left</h3>
+        Clean?
+        <input type="radio" id="LeftEarClean_Y" name="LeftEarClean" value="Y">Yes
+        <input type="radio" id="LeftEarClean_N" name="LeftEarClean" value="N">No
+        <br>
+        Intact?
+        <input type="radio" id="LeftEarIntact_Y" name="LeftEarIntact" value="Y">Yes
+        <input type="radio" id="LeftEarIntact_N" name="LeftEarIntact" value="N">No
+        <br>
+        Desc: <textarea id="LeftEarDesc"></textarea><br>
+        Image: <input type="file" class="dev-upload-left-otoscopic"><br>
+
+        <!-- Otoscopy Right -->
+        <h3>Otoscopy Right</h3>
+        Clean?
+        <input type="radio" id="RightEarClean_Y" name="RightEarClean" value="Y">Yes
+        <input type="radio" id="RightEarClean_N" name="RightEarClean" value="N">No
+        <br>
+        Intact?
+        <input type="radio" id="RightEarIntact_Y" name="RightEarIntact" value="Y">Yes
+        <input type="radio" id="RightEarIntact_N" name="RightEarIntact" value="N">No
+        <br>
+        Desc: <textarea id="RightEarDesc"></textarea><br>
+        Image: <input type="file" class="dev-upload-right-otoscopic"><br>
+
+        <!-- Tympanometry -->
+        <h3>Tympanometry</h3>
+        Left:
+        Type <input type="text" id="LeftEarType">
+        Vol <input type="text" id="LeftEarVol">
+        Pressure <input type="text" id="LeftEarPressure">
+        Compliance <input type="text" id="LeftEarCompliance">
+        <br>
+        Right:
+        Type <input type="text" id="RightEarType">
+        Vol <input type="text" id="RightEarVol">
+        Pressure <input type="text" id="RightEarPressure">
+        Compliance <input type="text" id="RightEarCompliance">
+        <br>
+
+        <!-- Speech Audiometry -->
+        <h3>Speech Audiometry</h3>
+        Left:
+        Type <select id="LeftSpeechThrType"><option value="SRT">SRT</option><option value="SDT">SDT</option></select>
+        Result <input type="text" id="LeftSpeechThrRes">
+        Score <input type="text" id="LeftSpeechScore">
+        MCL <input type="text" id="LeftSpeechMcl">
+        <br>
+        Right:
+        Type <select id="RightSpeechThrType"><option value="SRT">SRT</option><option value="SDT">SDT</option></select>
+        Result <input type="text" id="RightSpeechThrRes">
+        Score <input type="text" id="RightSpeechScore">
+        MCL <input type="text" id="RightSpeechMcl">
+        <br>
+
+    </div>
+</body>
+</html>

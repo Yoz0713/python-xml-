@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NOAHData>
+  <ActionDate>2023-11-15</ActionDate>
+  <Tympanometry>
+    <Left>
+      <Type>A</Type>
+      <Volume>0.9</Volume>
+      <Pressure>-10</Pressure>
+      <Compliance>0.5</Compliance>
+    </Left>
+    <Right>
+      <Type>B</Type>
+      <Volume>1.1</Volume>
+      <Pressure>5</Pressure>
+      <Compliance>0.3</Compliance>
+    </Right>
+  </Tympanometry>
+  <SpeechAudiometry>
+    <Left>
+      <Threshold>25</Threshold> <!-- SRT -->
+      <DiscriminationScore>95</DiscriminationScore> <!-- SDS -->
+      <MCL>55</MCL>
+    </Left>
+    <Right>
+      <Threshold>30</Threshold>
+      <DiscriminationScore>90</DiscriminationScore>
+      <MCL>60</MCL>
+    </Right>
+  </SpeechAudiometry>
+</NOAHData>
