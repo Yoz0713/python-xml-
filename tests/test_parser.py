@@ -5,7 +5,9 @@ from src.parser import parse_noah_xml
 class TestParser(unittest.TestCase):
     def test_parse_sample(self):
         filepath = "tests/sample_data.xml"
-        data = parse_noah_xml(filepath)
+        sessions = parse_noah_xml(filepath)
+        self.assertTrue(len(sessions) > 0)
+        data = sessions[0]
 
         self.assertEqual(data["TestDateY"], "2023")
         self.assertEqual(data["TestDateM"], "11")

@@ -37,12 +37,20 @@ class HearingAssessmentApp(ctk.CTk):
         self.show_step(0)
 
     def create_steps(self):
-        # Step 1: Target URL
+        # Step 1: Target URL & Login (Optional)
         frame1 = ctk.CTkFrame(self.content_frame)
-        ctk.CTkLabel(frame1, text="Step 1: Target URL", font=("Arial", 20, "bold")).pack(pady=20)
-        ctk.CTkLabel(frame1, text="Paste the full URL of the new report here:", font=("Arial", 12)).pack(pady=5)
+        ctk.CTkLabel(frame1, text="Step 1: Target URL & Login", font=("Arial", 20, "bold")).pack(pady=20)
+
+        ctk.CTkLabel(frame1, text="Target Report URL *", font=("Arial", 12)).pack(anchor="w", padx=20)
         self.url_entry = ctk.CTkEntry(frame1, placeholder_text="https://crm.greattree.com.tw/...")
-        self.url_entry.pack(pady=10, fill="x")
+        self.url_entry.pack(pady=5, padx=20, fill="x")
+
+        ctk.CTkLabel(frame1, text="Login Credentials (Optional - Auto Login if needed)", font=("Arial", 12)).pack(anchor="w", padx=20, pady=(20, 0))
+        self.username_entry = ctk.CTkEntry(frame1, placeholder_text="Username (Acct)")
+        self.username_entry.pack(pady=5, padx=20, fill="x")
+        self.password_entry = ctk.CTkEntry(frame1, placeholder_text="Password (Pwd)", show="*")
+        self.password_entry.pack(pady=5, padx=20, fill="x")
+
         self.steps.append(frame1)
 
         # Step 2: XML
@@ -51,8 +59,16 @@ class HearingAssessmentApp(ctk.CTk):
         ctk.CTkButton(frame2, text="Select XML File", command=self.select_xml_file).pack(pady=10)
         self.lbl_filepath = ctk.CTkLabel(frame2, text="No file selected")
         self.lbl_filepath.pack(pady=5)
-        self.lbl_test_date = ctk.CTkLabel(frame2, text="Test Date: -")
+
+        ctk.CTkLabel(frame2, text="Select Report Date:", font=("Arial", 12)).pack(pady=(10, 5))
+        self.session_var = ctk.StringVar(value="Select XML first")
+        self.session_menu = ctk.CTkOptionMenu(frame2, variable=self.session_var, values=[], command=self.on_session_select)
+        self.session_menu.pack(pady=5)
+
+        self.lbl_test_date = ctk.CTkLabel(frame2, text="Selected Data: -")
         self.lbl_test_date.pack(pady=5)
+
+        self.parsed_sessions = [] # Store list of sessions
         self.steps.append(frame2)
 
         # Step 3: Inspector
@@ -159,12 +175,47 @@ class HearingAssessmentApp(ctk.CTk):
             self.xml_filepath = filepath
             self.lbl_filepath.configure(text=filepath)
             try:
-                self.xml_data = parse_noah_xml(filepath)
-                date_str = self.xml_data.get("FullTestDate", "Unknown")
-                self.lbl_test_date.configure(text=f"Test Date: {date_str}")
+                # Returns list of dicts now
+                self.parsed_sessions = parse_noah_xml(filepath)
+
+                if not self.parsed_sessions:
+                    messagebox.showwarning("Warning", "No hearing sessions found in XML.")
+                    self.session_menu.configure(values=[])
+                    self.session_var.set("No Data")
+                    return
+
+                # Populate OptionMenu
+                # Format: "YYYY-MM-DD (Index)"
+                options = []
+                for idx, session in enumerate(self.parsed_sessions):
+                    date_str = session.get("FullTestDate", "Unknown")
+                    options.append(f"{date_str} [{idx}]")
+
+                self.session_menu.configure(values=options)
+                self.session_var.set(options[0])
+                self.on_session_select(options[0]) # Select first by default
+
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to parse XML: {e}")
                 self.lbl_test_date.configure(text="Test Date: Error")
+                self.parsed_sessions = []
+
+    def on_session_select(self, choice):
+        if not self.parsed_sessions:
+            return
+
+        # Extract index from "YYYY-MM-DD [0]"
+        try:
+            idx = int(choice.split("[")[-1].replace("]", ""))
+            self.xml_data = self.parsed_sessions[idx]
+
+            # Update display label
+            tymp_left = self.xml_data.get("Tymp_Left_Type", "-")
+            speech_left = self.xml_data.get("Speech_Left_SRT", "-")
+            self.lbl_test_date.configure(text=f"Data Preview: Tymp(L)={tymp_left}, SRT(L)={speech_left}")
+
+        except Exception as e:
+            print(f"Selection error: {e}")
 
     def select_image(self, side):
         filepath = filedialog.askopenfilename(filetypes=[("Images", "*.jpg *.png")])
@@ -174,6 +225,8 @@ class HearingAssessmentApp(ctk.CTk):
 
     def start_automation(self):
         url = self.url_entry.get()
+        user = self.username_entry.get()
+        password = self.password_entry.get()
         inspector = self.inspector_entry.get()
 
         if not all([url, inspector]):
@@ -181,6 +234,9 @@ class HearingAssessmentApp(ctk.CTk):
             return
 
         if not self.xml_data:
+             # If parsed_sessions exists but xml_data is empty, user might not have selected?
+             # But on_session_select sets it.
+             # If no file selected at all:
              if not messagebox.askyesno("No XML", "No XML file selected. Proceed with manual data only?"):
                 return
 
@@ -202,17 +258,17 @@ class HearingAssessmentApp(ctk.CTk):
 
         full_data = {**self.xml_data, **manual_data}
 
-        threading.Thread(target=self.run_automation_thread, args=(url, full_data)).start()
+        threading.Thread(target=self.run_automation_thread, args=(url, user, password, full_data)).start()
 
-    def run_automation_thread(self, url, data):
+    def run_automation_thread(self, url, user, password, data):
         try:
             auto = HearingAutomation()
-            # Navigate and wait for user to login if necessary
-            if auto.navigate_and_wait(url):
+            # Navigate and wait for user to login if necessary, auto-login if creds provided
+            if auto.navigate_and_wait(url, username=user, password=password):
                 auto.fill_form(data)
                 self.after(0, lambda: messagebox.showinfo("Success", "Automation Completed Successfully!"))
             else:
-                self.after(0, lambda: messagebox.showerror("Error", "Target page not reached (Timeout)."))
+                self.after(0, lambda: messagebox.showerror("Error", "Target page not reached (Timeout or Login Failed)."))
                 auto.close()
         except Exception as e:
             self.after(0, lambda: messagebox.showerror("Error", f"Automation Error: {e}"))

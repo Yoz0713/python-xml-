@@ -7,7 +7,8 @@ from src.parser import parse_noah_xml
 class TestAutomation(unittest.TestCase):
     def test_automation_logic(self):
         # Merge parsed data with some manual data
-        xml_data = parse_noah_xml("tests/sample_data.xml")
+        sessions = parse_noah_xml("tests/sample_data.xml")
+        xml_data = sessions[0]
 
         manual_data = {
             "InspectorName": "John Doe",
@@ -100,7 +101,7 @@ class TestAutomation(unittest.TestCase):
 
             # Navigate and Wait (this will block until InspectorName is found)
             # The thread will click the button which makes InspectorName visible.
-            success = automation.navigate_and_wait(mock_url, timeout=10)
+            success = automation.navigate_and_wait(mock_url, username="test", password="123", timeout=10)
             self.assertTrue(success, "Should detect target page after manual login")
 
             t.join()

@@ -27,30 +27,96 @@ class HearingAutomation:
             print(f"Error using webdriver_manager: {e}. Falling back to default.")
             self.driver = webdriver.Chrome(options=options)
 
-    def navigate_and_wait(self, url, timeout=300):
+    def navigate_and_wait(self, url, username=None, password=None, timeout=300):
         """
         Navigates to the URL and waits for the user to be logged in
         (if necessary) by checking for a key form element.
+        Handles redirection to Login page and back to Target if needed.
         """
         self.driver.get(url)
 
-        # Element that indicates we are on the correct report entry page.
-        # InspectorName is a required field on that page.
         target_element_id = "InspectorName"
+        login_input_id = "Acct" # Based on user feedback
 
-        try:
-            print(f"Waiting up to {timeout} seconds for page to load (please login if needed)...")
-            WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located((By.ID, target_element_id))
-            )
-            print("Target page detected.")
-            return True
-        except TimeoutException:
-            print("Timeout waiting for target page.")
-            return False
-        except Exception as e:
-            print(f"Error navigating: {e}")
-            return False
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            # 1. Check if we are on Target Page
+            try:
+                self.driver.find_element(By.ID, target_element_id)
+                print("Target page detected.")
+                return True
+            except NoSuchElementException:
+                pass
+
+            # 2. Check if we are on Login Page
+            try:
+                acct_input = self.driver.find_element(By.ID, login_input_id)
+                print("Login page detected.")
+
+                # If we have credentials, try to auto-login
+                if username and password:
+                    try:
+                        pwd_input = self.driver.find_element(By.ID, "Pwd")
+                        send_btn = self.driver.find_element(By.ID, "Send")
+
+                        # Only fill if empty to avoid fighting with user?
+                        # Or just fill.
+                        if not acct_input.get_attribute("value"):
+                            acct_input.send_keys(username)
+                            pwd_input.send_keys(password)
+                            send_btn.click()
+                            print("Auto-login attempted.")
+                            time.sleep(2) # Wait for transition
+
+                            # After login, system might redirect to Home, not Target.
+                            # So we might need to navigate to URL again.
+                            # But let's check current URL or Page Title first?
+                            # Simplest: just wait a bit and if not on target, re-navigate.
+                    except Exception as e:
+                        print(f"Auto-login error: {e}")
+            except NoSuchElementException:
+                pass
+
+            # 3. Check if we are logged in but on Home/Dashboard (not Target)
+            # This is tricky without knowing Home page ID.
+            # But if we are NOT on Login and NOT on Target, and we just logged in...
+            # We should try to re-navigate to target_url.
+
+            # Heuristic: If we are not on Login Page and not on Target Page,
+            # and it's been a few seconds since start, maybe we need to force reload target url?
+            # Or assume user is navigating.
+
+            # User specific complaint: "Redirects to Home".
+            # So if we detect we are NOT on Login page anymore, but still not on Target...
+            # Re-issue get(url).
+
+            # To avoid infinite reload loops, let's only do this if we think we are logged in.
+            # If Login ID is missing, we assume logged in.
+
+            try:
+                self.driver.find_element(By.ID, login_input_id)
+                is_login_page = True
+            except NoSuchElementException:
+                is_login_page = False
+
+            if not is_login_page:
+                # potentially logged in
+                try:
+                    self.driver.find_element(By.ID, target_element_id)
+                    return True
+                except NoSuchElementException:
+                    # Not on target, not on login. Likely Home.
+                    # Re-navigate to target url
+                    # throttle this
+                    print("Not on target or login. Re-navigating to target URL...")
+                    self.driver.get(url)
+                    time.sleep(3) # Wait for load
+
+            time.sleep(1)
+
+        print("Timeout waiting for target page.")
+        return False
 
     def fill_form(self, data):
         """
