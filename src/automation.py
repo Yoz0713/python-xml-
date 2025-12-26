@@ -1,9 +1,10 @@
 import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
+from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 class HearingAutomation:
     def __init__(self, headless=False):
@@ -26,44 +27,29 @@ class HearingAutomation:
             print(f"Error using webdriver_manager: {e}. Falling back to default.")
             self.driver = webdriver.Chrome(options=options)
 
-    def login(self, url, username, password):
+    def navigate_and_wait(self, url, timeout=300):
+        """
+        Navigates to the URL and waits for the user to be logged in
+        (if necessary) by checking for a key form element.
+        """
         self.driver.get(url)
-        time.sleep(1) # Wait for load. In production, use WebDriverWait.
 
-        # Try to find standard login fields
+        # Element that indicates we are on the correct report entry page.
+        # InspectorName is a required field on that page.
+        target_element_id = "InspectorName"
+
         try:
-            # Attempt 1: By Name
-            try:
-                user_input = self.driver.find_element(By.NAME, "username")
-                pass_input = self.driver.find_element(By.NAME, "password")
-            except NoSuchElementException:
-                # Attempt 2: By ID
-                user_input = self.driver.find_element(By.ID, "username")
-                pass_input = self.driver.find_element(By.ID, "password")
-
-            user_input.clear()
-            user_input.send_keys(username)
-            pass_input.clear()
-            pass_input.send_keys(password)
-
-            # Find submit button
-            try:
-                submit_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
-            except NoSuchElementException:
-                try:
-                    submit_btn = self.driver.find_element(By.ID, "login-btn")
-                except:
-                    # Try clicking enter on password field
-                    pass_input.submit()
-                    submit_btn = None
-
-            if submit_btn:
-                submit_btn.click()
-
-            time.sleep(2) # Wait for login
+            print(f"Waiting up to {timeout} seconds for page to load (please login if needed)...")
+            WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located((By.ID, target_element_id))
+            )
+            print("Target page detected.")
             return True
+        except TimeoutException:
+            print("Timeout waiting for target page.")
+            return False
         except Exception as e:
-            print(f"Login failed: {e}")
+            print(f"Error navigating: {e}")
             return False
 
     def fill_form(self, data):

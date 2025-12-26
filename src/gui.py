@@ -37,15 +37,12 @@ class HearingAssessmentApp(ctk.CTk):
         self.show_step(0)
 
     def create_steps(self):
-        # Step 1: Login
+        # Step 1: Target URL
         frame1 = ctk.CTkFrame(self.content_frame)
-        ctk.CTkLabel(frame1, text="Step 1: Login", font=("Arial", 20, "bold")).pack(pady=20)
-        self.username_entry = ctk.CTkEntry(frame1, placeholder_text="Username")
-        self.username_entry.pack(pady=10, fill="x")
-        self.password_entry = ctk.CTkEntry(frame1, placeholder_text="Password", show="*")
-        self.password_entry.pack(pady=10, fill="x")
-        self.patient_id_entry = ctk.CTkEntry(frame1, placeholder_text="Patient ID (Optional)")
-        self.patient_id_entry.pack(pady=10, fill="x")
+        ctk.CTkLabel(frame1, text="Step 1: Target URL", font=("Arial", 20, "bold")).pack(pady=20)
+        ctk.CTkLabel(frame1, text="Paste the full URL of the new report here:", font=("Arial", 12)).pack(pady=5)
+        self.url_entry = ctk.CTkEntry(frame1, placeholder_text="https://crm.greattree.com.tw/...")
+        self.url_entry.pack(pady=10, fill="x")
         self.steps.append(frame1)
 
         # Step 2: XML
@@ -176,13 +173,11 @@ class HearingAssessmentApp(ctk.CTk):
             self.vars_otoscopy[f"{side}_Image_Label"].configure(text=filepath)
 
     def start_automation(self):
-        url = "https://crm.greattree.com.tw/login"
-        user = self.username_entry.get()
-        password = self.password_entry.get()
+        url = self.url_entry.get()
         inspector = self.inspector_entry.get()
 
-        if not all([user, password, inspector]):
-            messagebox.showwarning("Missing Data", "Please fill in Username, Password, and Inspector Name.")
+        if not all([url, inspector]):
+            messagebox.showwarning("Missing Data", "Please fill in URL and Inspector Name.")
             return
 
         if not self.xml_data:
@@ -207,16 +202,17 @@ class HearingAssessmentApp(ctk.CTk):
 
         full_data = {**self.xml_data, **manual_data}
 
-        threading.Thread(target=self.run_automation_thread, args=(url, user, password, full_data)).start()
+        threading.Thread(target=self.run_automation_thread, args=(url, full_data)).start()
 
-    def run_automation_thread(self, url, user, password, data):
+    def run_automation_thread(self, url, data):
         try:
             auto = HearingAutomation()
-            if auto.login(url, user, password):
+            # Navigate and wait for user to login if necessary
+            if auto.navigate_and_wait(url):
                 auto.fill_form(data)
                 self.after(0, lambda: messagebox.showinfo("Success", "Automation Completed Successfully!"))
             else:
-                self.after(0, lambda: messagebox.showerror("Error", "Login failed."))
+                self.after(0, lambda: messagebox.showerror("Error", "Target page not reached (Timeout)."))
                 auto.close()
         except Exception as e:
             self.after(0, lambda: messagebox.showerror("Error", f"Automation Error: {e}"))
