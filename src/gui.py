@@ -9,95 +9,94 @@ class HearingAssessmentApp(ctk.CTk):
         super().__init__()
 
         self.title("Hearing Assessment Automation")
-        self.geometry("800x800")
+        self.geometry("600x500")
 
         # Data store
         self.xml_data = {}
         self.xml_filepath = None
+        self.vars_otoscopy = {}
+        self.current_step = 0
+        self.steps = []
 
-        # --- UI Layout ---
-        self.create_connection_section()
-        self.create_data_source_section()
-        self.create_manual_entry_section()
-        self.create_action_section()
+        # Main Layout
+        self.content_frame = ctk.CTkFrame(self)
+        self.content_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    def create_connection_section(self):
-        self.frame_conn = ctk.CTkFrame(self)
-        self.frame_conn.pack(pady=10, padx=10, fill="x")
+        self.nav_frame = ctk.CTkFrame(self, height=50)
+        self.nav_frame.pack(fill="x", padx=20, pady=10)
 
-        ctk.CTkLabel(self.frame_conn, text="Connection Settings", font=("Arial", 16, "bold")).pack(pady=5)
+        # Navigation Buttons
+        self.btn_prev = ctk.CTkButton(self.nav_frame, text="Previous", command=self.prev_step, state="disabled")
+        self.btn_prev.pack(side="left")
 
-        self.url_entry = ctk.CTkEntry(self.frame_conn, placeholder_text="Target System URL")
-        self.url_entry.pack(pady=5, padx=10, fill="x")
+        self.btn_next = ctk.CTkButton(self.nav_frame, text="Next", command=self.next_step)
+        self.btn_next.pack(side="right")
 
-        self.username_entry = ctk.CTkEntry(self.frame_conn, placeholder_text="Username")
-        self.username_entry.pack(pady=5, padx=10, fill="x")
+        # Initialize Steps
+        self.create_steps()
+        self.show_step(0)
 
-        self.password_entry = ctk.CTkEntry(self.frame_conn, placeholder_text="Password", show="*")
-        self.password_entry.pack(pady=5, padx=10, fill="x")
+    def create_steps(self):
+        # Step 1: Login
+        frame1 = ctk.CTkFrame(self.content_frame)
+        ctk.CTkLabel(frame1, text="Step 1: Login", font=("Arial", 20, "bold")).pack(pady=20)
+        self.username_entry = ctk.CTkEntry(frame1, placeholder_text="Username")
+        self.username_entry.pack(pady=10, fill="x")
+        self.password_entry = ctk.CTkEntry(frame1, placeholder_text="Password", show="*")
+        self.password_entry.pack(pady=10, fill="x")
+        self.patient_id_entry = ctk.CTkEntry(frame1, placeholder_text="Patient ID (Optional)")
+        self.patient_id_entry.pack(pady=10, fill="x")
+        self.steps.append(frame1)
 
-        self.patient_id_entry = ctk.CTkEntry(self.frame_conn, placeholder_text="Patient ID (Optional)")
-        self.patient_id_entry.pack(pady=5, padx=10, fill="x")
+        # Step 2: XML
+        frame2 = ctk.CTkFrame(self.content_frame)
+        ctk.CTkLabel(frame2, text="Step 2: Upload XML", font=("Arial", 20, "bold")).pack(pady=20)
+        ctk.CTkButton(frame2, text="Select XML File", command=self.select_xml_file).pack(pady=10)
+        self.lbl_filepath = ctk.CTkLabel(frame2, text="No file selected")
+        self.lbl_filepath.pack(pady=5)
+        self.lbl_test_date = ctk.CTkLabel(frame2, text="Test Date: -")
+        self.lbl_test_date.pack(pady=5)
+        self.steps.append(frame2)
 
-    def create_data_source_section(self):
-        self.frame_data = ctk.CTkFrame(self)
-        self.frame_data.pack(pady=10, padx=10, fill="x")
+        # Step 3: Inspector
+        frame3 = ctk.CTkFrame(self.content_frame)
+        ctk.CTkLabel(frame3, text="Step 3: Inspector Name", font=("Arial", 20, "bold")).pack(pady=20)
+        self.inspector_entry = ctk.CTkEntry(frame3, placeholder_text="Inspector Name")
+        self.inspector_entry.pack(pady=10, fill="x")
+        self.steps.append(frame3)
 
-        ctk.CTkLabel(self.frame_data, text="Data Source", font=("Arial", 16, "bold")).pack(pady=5)
+        # Step 4: Otoscopy
+        frame4 = ctk.CTkScrollableFrame(self.content_frame)
+        ctk.CTkLabel(frame4, text="Step 4: Otoscopy", font=("Arial", 20, "bold")).pack(pady=10)
+        self.create_otoscopy_fields(frame4, "Left")
+        ctk.CTkFrame(frame4, height=2, fg_color="gray").pack(fill="x", pady=10)
+        self.create_otoscopy_fields(frame4, "Right")
+        self.steps.append(frame4)
 
-        self.btn_select_file = ctk.CTkButton(self.frame_data, text="Select XML File", command=self.select_xml_file)
-        self.btn_select_file.pack(pady=5)
+        # Step 5: Speech Type
+        frame5 = ctk.CTkFrame(self.content_frame)
+        ctk.CTkLabel(frame5, text="Step 5: Speech Audiometry", font=("Arial", 20, "bold")).pack(pady=20)
 
-        self.lbl_filepath = ctk.CTkLabel(self.frame_data, text="No file selected")
-        self.lbl_filepath.pack(pady=2)
-
-        self.lbl_test_date = ctk.CTkLabel(self.frame_data, text="Test Date: -")
-        self.lbl_test_date.pack(pady=2)
-
-    def create_manual_entry_section(self):
-        self.scroll_frame = ctk.CTkScrollableFrame(self, label_text="Manual Entry", height=300)
-        self.scroll_frame.pack(pady=10, padx=10, fill="both", expand=True)
-
-        # Inspector
-        ctk.CTkLabel(self.scroll_frame, text="Inspector Name *").pack(anchor="w")
-        self.inspector_entry = ctk.CTkEntry(self.scroll_frame)
-        self.inspector_entry.pack(fill="x", pady=(0, 10))
-
-        # Otoscopy Left
-        self.create_otoscopy_fields(self.scroll_frame, "Left")
-
-        # Otoscopy Right
-        self.create_otoscopy_fields(self.scroll_frame, "Right")
-
-        # Speech Audiometry Type
-        ctk.CTkLabel(self.scroll_frame, text="Speech Audiometry Type", font=("Arial", 14, "bold")).pack(pady=5, anchor="w")
-
-        grid_frame = ctk.CTkFrame(self.scroll_frame)
-        grid_frame.pack(fill="x")
-
-        ctk.CTkLabel(grid_frame, text="Left Ear Type:").grid(row=0, column=0, padx=5, pady=5)
-        self.speech_left_type = ctk.CTkOptionMenu(grid_frame, values=["SRT", "SDT"])
+        ctk.CTkLabel(frame5, text="Left Ear Type:").pack(pady=5)
+        self.speech_left_type = ctk.CTkOptionMenu(frame5, values=["SRT", "SDT"])
         self.speech_left_type.set("SRT")
-        self.speech_left_type.grid(row=0, column=1, padx=5, pady=5)
+        self.speech_left_type.pack(pady=5)
 
-        ctk.CTkLabel(grid_frame, text="Right Ear Type:").grid(row=0, column=2, padx=5, pady=5)
-        self.speech_right_type = ctk.CTkOptionMenu(grid_frame, values=["SRT", "SDT"])
+        ctk.CTkLabel(frame5, text="Right Ear Type:").pack(pady=5)
+        self.speech_right_type = ctk.CTkOptionMenu(frame5, values=["SRT", "SDT"])
         self.speech_right_type.set("SRT")
-        self.speech_right_type.grid(row=0, column=3, padx=5, pady=5)
+        self.speech_right_type.pack(pady=5)
+        self.steps.append(frame5)
 
     def create_otoscopy_fields(self, parent, side):
         frame = ctk.CTkFrame(parent)
         frame.pack(pady=5, fill="x")
-
         ctk.CTkLabel(frame, text=f"{side} Ear Otoscopy", font=("Arial", 14, "bold")).pack(anchor="w", padx=5, pady=5)
 
         # Clean Canal
         ctk.CTkLabel(frame, text="Clean Canal?").pack(anchor="w", padx=5)
-        self.vars_otoscopy = getattr(self, "vars_otoscopy", {})
-
         var_clean = ctk.StringVar(value="Y")
         self.vars_otoscopy[f"{side}_Clean"] = var_clean
-
         row1 = ctk.CTkFrame(frame, fg_color="transparent")
         row1.pack(fill="x", padx=5)
         ctk.CTkRadioButton(row1, text="Yes", variable=var_clean, value="Y").pack(side="left", padx=10)
@@ -107,7 +106,6 @@ class HearingAssessmentApp(ctk.CTk):
         ctk.CTkLabel(frame, text="Intact Eardrum?").pack(anchor="w", padx=5)
         var_intact = ctk.StringVar(value="Y")
         self.vars_otoscopy[f"{side}_Intact"] = var_intact
-
         row2 = ctk.CTkFrame(frame, fg_color="transparent")
         row2.pack(fill="x", padx=5)
         ctk.CTkRadioButton(row2, text="Yes", variable=var_intact, value="Y").pack(side="left", padx=10)
@@ -129,11 +127,34 @@ class HearingAssessmentApp(ctk.CTk):
         self.vars_otoscopy[f"{side}_Image_Label"] = lbl_img
         self.vars_otoscopy[f"{side}_Image_Path"] = None
 
-    def create_action_section(self):
-        self.btn_start = ctk.CTkButton(self, text="Start Automation", command=self.start_automation, height=40, font=("Arial", 16, "bold"))
-        self.btn_start.pack(pady=10, padx=10, fill="x")
+    def show_step(self, step):
+        # Hide all
+        for frame in self.steps:
+            frame.pack_forget()
 
-    # --- Logic ---
+        # Show current
+        self.steps[step].pack(fill="both", expand=True)
+        self.current_step = step
+
+        # Update Buttons
+        if step == 0:
+            self.btn_prev.configure(state="disabled")
+        else:
+            self.btn_prev.configure(state="normal")
+
+        if step == len(self.steps) - 1:
+            self.btn_next.configure(text="Submit", command=self.start_automation)
+        else:
+            self.btn_next.configure(text="Next", command=self.next_step)
+
+    def next_step(self):
+        if self.current_step < len(self.steps) - 1:
+            # Validation logic could go here
+            self.show_step(self.current_step + 1)
+
+    def prev_step(self):
+        if self.current_step > 0:
+            self.show_step(self.current_step - 1)
 
     def select_xml_file(self):
         filepath = filedialog.askopenfilename(filetypes=[("XML Files", "*.xml")])
@@ -155,22 +176,20 @@ class HearingAssessmentApp(ctk.CTk):
             self.vars_otoscopy[f"{side}_Image_Label"].configure(text=filepath)
 
     def start_automation(self):
-        # Validation
-        url = self.url_entry.get()
+        url = "https://crm.greattree.com.tw/login"
         user = self.username_entry.get()
         password = self.password_entry.get()
         inspector = self.inspector_entry.get()
 
-        if not all([url, user, password, inspector]):
-            messagebox.showwarning("Missing Data", "Please fill in URL, Username, Password, and Inspector Name.")
+        if not all([user, password, inspector]):
+            messagebox.showwarning("Missing Data", "Please fill in Username, Password, and Inspector Name.")
             return
 
         if not self.xml_data:
-            if not messagebox.askyesno("No XML", "No XML file selected. Proceed with manual data only?"):
+             if not messagebox.askyesno("No XML", "No XML file selected. Proceed with manual data only?"):
                 return
 
-        # Disable button
-        self.btn_start.configure(state="disabled", text="Running...")
+        self.btn_next.configure(state="disabled", text="Running...")
 
         # Collect Data
         manual_data = {
@@ -179,7 +198,6 @@ class HearingAssessmentApp(ctk.CTk):
             "Speech_Right_Type": self.speech_right_type.get()
         }
 
-        # Otoscopy Data
         for side in ["Left", "Right"]:
             manual_data[f"Otoscopy_{side}_Clean"] = self.vars_otoscopy[f"{side}_Clean"].get()
             manual_data[f"Otoscopy_{side}_Intact"] = self.vars_otoscopy[f"{side}_Intact"].get()
@@ -189,28 +207,21 @@ class HearingAssessmentApp(ctk.CTk):
 
         full_data = {**self.xml_data, **manual_data}
 
-        # Run in thread to keep UI responsive
         threading.Thread(target=self.run_automation_thread, args=(url, user, password, full_data)).start()
 
     def run_automation_thread(self, url, user, password, data):
         try:
-            auto = HearingAutomation() # Defaults to not headless
+            auto = HearingAutomation()
             if auto.login(url, user, password):
                 auto.fill_form(data)
                 self.after(0, lambda: messagebox.showinfo("Success", "Automation Completed Successfully!"))
-                # Keep browser open or close? Prompt doesn't specify.
-                # Usually better to keep open for verification, or close.
-                # I'll wait a bit then close or just leave it.
-                # Let's leave it open for user to review, but the script object might go out of scope.
-                # Ideally, we should ask the user or just detach.
-                # But for this simple app, we can just say complete.
             else:
                 self.after(0, lambda: messagebox.showerror("Error", "Login failed."))
                 auto.close()
         except Exception as e:
             self.after(0, lambda: messagebox.showerror("Error", f"Automation Error: {e}"))
         finally:
-            self.after(0, lambda: self.btn_start.configure(state="normal", text="Start Automation"))
+            self.after(0, lambda: self.btn_next.configure(state="normal", text="Submit"))
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("System")
