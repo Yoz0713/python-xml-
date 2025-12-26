@@ -197,7 +197,7 @@ class HearingAssessmentApp(ctk.CTk):
             auto = HearingAutomation() # Defaults to not headless
             if auto.login(url, user, password):
                 auto.fill_form(data)
-                messagebox.showinfo("Success", "Automation Completed Successfully!")
+                self.after(0, lambda: messagebox.showinfo("Success", "Automation Completed Successfully!"))
                 # Keep browser open or close? Prompt doesn't specify.
                 # Usually better to keep open for verification, or close.
                 # I'll wait a bit then close or just leave it.
@@ -205,12 +205,12 @@ class HearingAssessmentApp(ctk.CTk):
                 # Ideally, we should ask the user or just detach.
                 # But for this simple app, we can just say complete.
             else:
-                messagebox.showerror("Error", "Login failed.")
+                self.after(0, lambda: messagebox.showerror("Error", "Login failed."))
                 auto.close()
         except Exception as e:
-            messagebox.showerror("Error", f"Automation Error: {e}")
+            self.after(0, lambda: messagebox.showerror("Error", f"Automation Error: {e}"))
         finally:
-            self.btn_start.configure(state="normal", text="Start Automation")
+            self.after(0, lambda: self.btn_start.configure(state="normal", text="Start Automation"))
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("System")
