@@ -325,7 +325,7 @@ class HearingAssessmentApp(ctk.CTk):
 
                 self.populate_manual_form()
                 self.btn_process.configure(state="normal")
-                self.log_status(f"解析成功: {patient_name}")
+                self.log_status(f"解析成功: {patient_name} (生日: {birth_date})")
             else:
                 self.lbl_patient_name.configure(text="⚠️ 無法解析檔案")
                 self.lbl_patient_info.configure(text=os.path.basename(filepath))
