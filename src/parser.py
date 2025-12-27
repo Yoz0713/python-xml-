@@ -1,30 +1,90 @@
 import xml.etree.ElementTree as ET
 from datetime import datetime
+import re
 
 def smart_clean_name(raw_first_name, raw_last_name):
     """
-    Clean patient name by filtering out employee IDs (digit-only strings).
-    Audiologists often type their Employee ID into Name fields.
+    Clean patient name by:
+    1. Removing all digits from name strings (e.g., "10158游閔暘" -> "游閔暘")
+    2. Combining in LastName + FirstName order (Chinese naming convention)
     
     Args:
         raw_first_name (str): Raw first name from XML
         raw_last_name (str): Raw last name from XML
     
     Returns:
-        str: Cleaned patient name (non-digit parts combined)
+        str: Cleaned patient name (LastName + FirstName, digits removed)
     """
-    name_parts = []
+    def remove_digits(text):
+        """Remove all digit characters from a string"""
+        if not text:
+            return ""
+        return re.sub(r'\d+', '', text).strip()
     
-    # Check FirstName - keep if not purely digits
-    if raw_first_name and not raw_first_name.strip().isdigit():
-        name_parts.append(raw_first_name.strip())
+    # Clean both names by removing digits
+    clean_last_name = remove_digits(raw_last_name)
+    clean_first_name = remove_digits(raw_first_name)
     
-    # Check LastName - keep if not purely digits
-    if raw_last_name and not raw_last_name.strip().isdigit():
-        name_parts.append(raw_last_name.strip())
+    # Combine in LastName + FirstName order (Chinese convention)
+    # Filter out empty strings
+    name_parts = [n for n in [clean_last_name, clean_first_name] if n]
     
-    # Combine remaining parts
     return ''.join(name_parts)
+
+
+def classify_tympanogram_type(pressure, compliance):
+    """
+    Automatically classify tympanogram type based on pressure and compliance values.
+    
+    Classification criteria:
+    - Type A: Normal (-100 to +50 daPa, compliance 0.3-1.75 ml)
+    - Type As: Low compliance (shallow) - compliance < 0.3 ml
+    - Type Ad: High compliance (deep) - compliance > 1.75 ml
+    - Type B: Flat (no clear peak, or abnormal values)
+    - Type C: Negative pressure (< -100 daPa with normal compliance)
+    
+    Args:
+        pressure (str/float): Peak pressure in daPa
+        compliance (str/float): Peak compliance in ml
+    
+    Returns:
+        str: Tympanogram type (A, As, Ad, B, or C)
+    """
+    try:
+        p = float(pressure) if pressure else None
+        c = float(compliance) if compliance else None
+        
+        if p is None or c is None:
+            return ""  # Can't classify without data
+        
+        # Type B: Very low/no compliance (flat tympanogram)
+        if c < 0.1:
+            return "B"
+        
+        # Type C: Significant negative pressure with normal compliance
+        if p < -100 and 0.3 <= c <= 1.75:
+            return "C"
+        
+        # Normal pressure range (-100 to +50)
+        if -100 <= p <= 50:
+            if c < 0.3:
+                return "As"  # Low compliance
+            elif c > 1.75:
+                return "Ad"  # High compliance
+            else:
+                return "A"   # Normal
+        
+        # Outside normal pressure range but has compliance
+        if c >= 0.3:
+            if p < -100:
+                return "C"
+            else:
+                return "A"  # Positive pressure, rare
+        
+        return "B"  # Default to B if unclear
+        
+    except (ValueError, TypeError):
+        return ""  # Can't parse values
 
 def parse_noah_xml(filepath):
     """
@@ -173,6 +233,46 @@ def parse_noah_xml(filepath):
                             if val is not None:
                                 current_session[f"Speech_{side}_MCL"] = val.text
 
+                    # ==========================================
+                    # Pure Tone Audiometry - Air & Bone Conduction
+                    # ==========================================
+                    elif "ToneThresholdAudiogram" in clean_tag:
+                        # Determine Air or Bone conduction from StimulusSignalOutput
+                        conduction_type = "Air"  # Default
+                        if conditions is not None:
+                            output = conditions.find('aud:StimulusSignalOutput', ns)
+                            if output is not None and output.text:
+                                if "BoneConductor" in output.text:
+                                    conduction_type = "Bone"
+                                elif "AirConductor" in output.text:
+                                    conduction_type = "Air"
+                        
+                        # Extract all TonePoints
+                        tone_points = child.findall('.//aud:TonePoints', ns)
+                        for point in tone_points:
+                            freq_elem = point.find('aud:StimulusFrequency', ns)
+                            level_elem = point.find('aud:StimulusLevel', ns)
+                            if freq_elem is not None and level_elem is not None:
+                                freq = freq_elem.text
+                                level = level_elem.text
+                                # Create key like PTA_Left_Air_500 or PTA_Right_Bone_1000
+                                current_session[f"PTA_{side}_{conduction_type}_{freq}"] = level
+
+                    # ==========================================
+                    # Uncomfortable Level (UCL)
+                    # ==========================================
+                    elif "UncomfortableLevel" in clean_tag:
+                        # Extract all TonePoints for UCL
+                        tone_points = child.findall('.//aud:TonePoints', ns)
+                        for point in tone_points:
+                            freq_elem = point.find('aud:StimulusFrequency', ns)
+                            level_elem = point.find('aud:StimulusLevel', ns)
+                            if freq_elem is not None and level_elem is not None:
+                                freq = freq_elem.text
+                                level = level_elem.text
+                                # Create key like PTA_Left_UCL_500
+                                current_session[f"PTA_{side}_UCL_{freq}"] = level
+
         # Parse Impedance (Tymp)
         elif "Impedance" in type_of_data:
             # Determine Side from Description usually: "Tympanometry Right"
@@ -232,9 +332,12 @@ def parse_noah_xml(filepath):
                             except:
                                 current_session[f"Tymp_{side}_Compliance"] = val.text
 
-                    # Type? Not in XML explicitly.
-                    # Leave blank or default?
-                    # current_session[f"Tymp_{side}_Type"] = ""
+                    # Auto-classify tympanogram type based on pressure and compliance
+                    pressure_val = current_session.get(f"Tymp_{side}_Pressure")
+                    compliance_val = current_session.get(f"Tymp_{side}_Compliance")
+                    tymp_type = classify_tympanogram_type(pressure_val, compliance_val)
+                    if tymp_type:
+                        current_session[f"Tymp_{side}_Type"] = tymp_type
 
     # Convert dictionary values to list, sorted by date (reverse?)
     # Sort keys decending

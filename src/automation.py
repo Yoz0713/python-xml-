@@ -135,6 +135,7 @@ class HearingAutomation:
     def search_patient(self, patient_name, birth_date, timeout=30):
         """
         Search for a patient in CRM using name and birthday.
+        Raises exception if multiple patients with same name+birthday found.
         
         Args:
             patient_name (str): Patient name (Target_Patient_Name from XML)
@@ -143,6 +144,9 @@ class HearingAutomation:
         
         Returns:
             bool: True if search completed successfully
+            
+        Raises:
+            Exception: If multiple patients found (duplicate detection)
         """
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
@@ -193,8 +197,7 @@ class HearingAutomation:
             # Wait for search results to load
             time.sleep(2)
             
-            # Find and click on the first matching patient in search results
-            # Look for the patient name link in the table
+            # Find and check search results
             try:
                 # Find the result table
                 result_table = wait.until(EC.presence_of_element_located(
@@ -204,11 +207,19 @@ class HearingAutomation:
                 # Find all patient name links (in td.client a)
                 patient_links = result_table.find_elements(By.CSS_SELECTOR, "td.client a")
                 
-                if patient_links:
-                    # Click the first matching result
+                if len(patient_links) == 0:
+                    raise Exception(f"找不到病患: {patient_name}")
+                
+                elif len(patient_links) > 1:
+                    # DUPLICATE DETECTION - Multiple patients found
+                    found_names = [link.text for link in patient_links[:5]]  # Get first 5 names
+                    raise Exception(f"重複病患警告: 找到 {len(patient_links)} 位相同姓名或條件的病患: {', '.join(found_names)}")
+                
+                else:
+                    # Exactly one patient found - proceed
                     first_link = patient_links[0]
                     link_name = first_link.text
-                    print(f"Found patient: {link_name}")
+                    print(f"Found unique patient: {link_name}")
                     first_link.click()
                     
                     # Wait for patient dashboard to load
@@ -216,21 +227,20 @@ class HearingAutomation:
                     print("Navigated to patient dashboard")
                     
                     # Now click on 聽力報告 menu
-                    # TODO: Need HTML structure of the hearing report menu
-                    # For now, placeholder - will be updated when user provides menu HTML
                     if not self.navigate_to_hearing_report():
                         print("Warning: Could not navigate to hearing report")
                     
                     return True
-                else:
-                    print("No search results found")
-                    return False
-                    
+                
             except Exception as e:
+                if "重複病患" in str(e) or "找不到病患" in str(e):
+                    raise  # Re-raise duplicate/not-found errors
                 print(f"Error clicking search result: {e}")
                 return False
             
         except Exception as e:
+            if "重複病患" in str(e) or "找不到病患" in str(e):
+                raise  # Re-raise duplicate/not-found errors
             print(f"Search error: {e}")
             return False
 

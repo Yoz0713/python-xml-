@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<pt:NOAH_Patients_Export xmlns:aud="http://www.himsa.com/Measurement/Audiogram" xmlns:his="http://www.himsa.com/Instrument/Selection" xmlns:rem="http://www.himsa.com/Measurement/RealEar" xmlns:imp="http://www.himsa.com/Measurement/Impedance" xmlns:hif="http://www.himsa.com/Instrument/Fitting" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:pt="http://www.himsa.com/Measurement/PatientExport.xsd" noNamespaceSchemaLocation="PatientExport.xsd">
+<pt:Patient>
+<pt:Patient>
+<pt:NOAHPatientId>498</pt:NOAHPatientId>
+<pt:FirstName>真弓</pt:FirstName>
+<pt:LastName>陳</pt:LastName>
+<pt:DateofBirth>1960-10-08</pt:DateofBirth>
+<pt:Actions>
+<pt:Action>
+<pt:TypeOfData>Impedance measurements</pt:TypeOfData>
+<pt:Description>Tympanometry Right</pt:Description>
+<pt:ActionDate>2025-08-09T15:10:18</pt:ActionDate>
+<pt:PublicData>
+<AcousticImpedanceCompleteMeasurement xmlns="http://www.himsa.com/Measurement/Impedance" Version="500">
+<TympanogramTest>
+<MaximumCompliance>
+<ComplianceValue><ArgumentCompliance1>19</ArgumentCompliance1></ComplianceValue>
+</MaximumCompliance>
+<CanalVolume>
+<ComplianceValue><ArgumentCompliance1>120</ArgumentCompliance1></ComplianceValue>
+</CanalVolume>
+<Pressure>-16</Pressure>
+</TympanogramTest>
+</AcousticImpedanceCompleteMeasurement>
+</pt:PublicData>
+</pt:Action>
+<pt:Action>
+<pt:TypeOfData>Impedance measurements</pt:TypeOfData>
+<pt:Description>Tympanometry Left</pt:Description>
+<pt:ActionDate>2025-08-09T15:10:18</pt:ActionDate>
+<pt:PublicData>
+<AcousticImpedanceCompleteMeasurement xmlns="http://www.himsa.com/Measurement/Impedance" Version="500">
+<TympanogramTest>
+<MaximumCompliance>
+<ComplianceValue><ArgumentCompliance1>13</ArgumentCompliance1></ComplianceValue>
+</MaximumCompliance>
+<CanalVolume>
+<ComplianceValue><ArgumentCompliance1>111</ArgumentCompliance1></ComplianceValue>
+</CanalVolume>
+<Pressure>32</Pressure>
+</TympanogramTest>
+</AcousticImpedanceCompleteMeasurement>
+</pt:PublicData>
+</pt:Action>
+<pt:Action>
+<pt:TypeOfData>Audiogram</pt:TypeOfData>
+<pt:Description>Pure tone audiometry, Speech audiometry</pt:Description>
+<pt:ActionDate>2025-08-09T15:27:21</pt:ActionDate>
+<pt:PublicData>
+<HIMSAAudiometricStandard xmlns="http://www.himsa.com/Measurement/Audiogram" Version="500">
+<SpeechDiscriminationAudiogram>
+<AudMeasurementConditions>
+<StimulusSignalOutput>AirConductorRight</StimulusSignalOutput>
+</AudMeasurementConditions>
+<SpeechDiscriminationPoints>
+<StimulusLevel>70</StimulusLevel>
+<ScorePercent>92</ScorePercent>
+</SpeechDiscriminationPoints>
+</SpeechDiscriminationAudiogram>
+<SpeechDiscriminationAudiogram>
+<AudMeasurementConditions>
+<StimulusSignalOutput>AirConductorLeft</StimulusSignalOutput>
+</AudMeasurementConditions>
+<SpeechDiscriminationPoints>
+<StimulusLevel>70</StimulusLevel>
+<ScorePercent>88</ScorePercent>
+</SpeechDiscriminationPoints>
+</SpeechDiscriminationAudiogram>
+<SpeechReceptionThresholdAudiogram>
+<AudMeasurementConditions>
+<StimulusSignalOutput>AirConductorRight</StimulusSignalOutput>
+</AudMeasurementConditions>
+<SpeechReceptionPoints>
+<StimulusLevel>45</StimulusLevel>
+</SpeechReceptionPoints>
+</SpeechReceptionThresholdAudiogram>
+<SpeechReceptionThresholdAudiogram>
+<AudMeasurementConditions>
+<StimulusSignalOutput>AirConductorLeft</StimulusSignalOutput>
+</AudMeasurementConditions>
+<SpeechReceptionPoints>
+<StimulusLevel>45</StimulusLevel>
+</SpeechReceptionPoints>
+</SpeechReceptionThresholdAudiogram>
+<SpeechMostComfortableLevel>
+<AudMeasurementConditions>
+<StimulusSignalOutput>AirConductorRight</StimulusSignalOutput>
+</AudMeasurementConditions>
+<SpeechMostComfortablePoint>
+<StimulusLevel>70</StimulusLevel>
+</SpeechMostComfortablePoint>
+</SpeechMostComfortableLevel>
+<SpeechMostComfortableLevel>
+<AudMeasurementConditions>
+<StimulusSignalOutput>AirConductorLeft</StimulusSignalOutput>
+</AudMeasurementConditions>
+<SpeechMostComfortablePoint>
+<StimulusLevel>70</StimulusLevel>
+</SpeechMostComfortablePoint>
+</SpeechMostComfortableLevel>
+</HIMSAAudiometricStandard>
+</pt:PublicData>
+</pt:Action>
+</pt:Actions>
+</pt:Patient>
+</pt:Patient>
+</pt:NOAH_Patients_Export>

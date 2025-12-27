@@ -178,19 +178,79 @@ class HearingAssessmentApp(ctk.CTk):
         self.frame_form = ctk.CTkScrollableFrame(form_card, fg_color="transparent")
         self.frame_form.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # Image selectors
-        img_frame = ctk.CTkFrame(form_card, fg_color="transparent")
-        img_frame.pack(fill="x", padx=15, pady=(0, 15))
+        # Otoscopy Section (Image + Settings)
+        otoscopy_frame = ctk.CTkFrame(form_card, fg_color="transparent")
+        otoscopy_frame.pack(fill="x", padx=15, pady=(0, 15))
 
-        self.btn_img_l = ctk.CTkButton(img_frame, text="📷 左耳圖像", width=120,
+        ctk.CTkLabel(otoscopy_frame, text="🔬 耳鏡檢查設定", 
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    text_color="#17a2b8").pack(anchor="w", pady=(0, 10))
+
+        # Left Ear Settings
+        left_oto_frame = ctk.CTkFrame(otoscopy_frame, fg_color="#2b2b2b", corner_radius=8)
+        left_oto_frame.pack(fill="x", pady=(0, 8))
+        
+        left_header = ctk.CTkFrame(left_oto_frame, fg_color="#1e5631", corner_radius=0)
+        left_header.pack(fill="x")
+        ctk.CTkLabel(left_header, text="左耳 Left", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=5)
+
+        left_content = ctk.CTkFrame(left_oto_frame, fg_color="transparent")
+        left_content.pack(fill="x", padx=10, pady=10)
+
+        # Left - Ear Clean
+        left_clean_row = ctk.CTkFrame(left_content, fg_color="transparent")
+        left_clean_row.pack(fill="x", pady=2)
+        ctk.CTkLabel(left_clean_row, text="耳道乾淨：", width=80, anchor="w").pack(side="left")
+        self.left_ear_clean = ctk.StringVar(value="True")
+        ctk.CTkRadioButton(left_clean_row, text="是", variable=self.left_ear_clean, value="True").pack(side="left", padx=(0, 10))
+        ctk.CTkRadioButton(left_clean_row, text="否", variable=self.left_ear_clean, value="False").pack(side="left")
+
+        # Left - Ear Intact
+        left_intact_row = ctk.CTkFrame(left_content, fg_color="transparent")
+        left_intact_row.pack(fill="x", pady=2)
+        ctk.CTkLabel(left_intact_row, text="鼓膜完整：", width=80, anchor="w").pack(side="left")
+        self.left_ear_intact = ctk.StringVar(value="True")
+        ctk.CTkRadioButton(left_intact_row, text="是", variable=self.left_ear_intact, value="True").pack(side="left", padx=(0, 10))
+        ctk.CTkRadioButton(left_intact_row, text="否", variable=self.left_ear_intact, value="False").pack(side="left")
+
+        # Left - Image Button
+        self.btn_img_l = ctk.CTkButton(left_content, text="📷 選擇左耳圖像", height=28,
                                        fg_color="#6c757d", hover_color="#5a6268",
                                        command=lambda: self.select_img("Left"))
-        self.btn_img_l.pack(side="left", padx=(0, 10))
+        self.btn_img_l.pack(fill="x", pady=(8, 0))
 
-        self.btn_img_r = ctk.CTkButton(img_frame, text="📷 右耳圖像", width=120,
+        # Right Ear Settings
+        right_oto_frame = ctk.CTkFrame(otoscopy_frame, fg_color="#2b2b2b", corner_radius=8)
+        right_oto_frame.pack(fill="x")
+        
+        right_header = ctk.CTkFrame(right_oto_frame, fg_color="#8b0000", corner_radius=0)
+        right_header.pack(fill="x")
+        ctk.CTkLabel(right_header, text="右耳 Right", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=5)
+
+        right_content = ctk.CTkFrame(right_oto_frame, fg_color="transparent")
+        right_content.pack(fill="x", padx=10, pady=10)
+
+        # Right - Ear Clean
+        right_clean_row = ctk.CTkFrame(right_content, fg_color="transparent")
+        right_clean_row.pack(fill="x", pady=2)
+        ctk.CTkLabel(right_clean_row, text="耳道乾淨：", width=80, anchor="w").pack(side="left")
+        self.right_ear_clean = ctk.StringVar(value="True")
+        ctk.CTkRadioButton(right_clean_row, text="是", variable=self.right_ear_clean, value="True").pack(side="left", padx=(0, 10))
+        ctk.CTkRadioButton(right_clean_row, text="否", variable=self.right_ear_clean, value="False").pack(side="left")
+
+        # Right - Ear Intact
+        right_intact_row = ctk.CTkFrame(right_content, fg_color="transparent")
+        right_intact_row.pack(fill="x", pady=2)
+        ctk.CTkLabel(right_intact_row, text="鼓膜完整：", width=80, anchor="w").pack(side="left")
+        self.right_ear_intact = ctk.StringVar(value="True")
+        ctk.CTkRadioButton(right_intact_row, text="是", variable=self.right_ear_intact, value="True").pack(side="left", padx=(0, 10))
+        ctk.CTkRadioButton(right_intact_row, text="否", variable=self.right_ear_intact, value="False").pack(side="left")
+
+        # Right - Image Button
+        self.btn_img_r = ctk.CTkButton(right_content, text="📷 選擇右耳圖像", height=28,
                                        fg_color="#6c757d", hover_color="#5a6268",
                                        command=lambda: self.select_img("Right"))
-        self.btn_img_r.pack(side="left")
+        self.btn_img_r.pack(fill="x", pady=(8, 0))
 
         # Right Column - Status Log
         log_card = ctk.CTkFrame(content_area, corner_radius=10)
@@ -281,9 +341,6 @@ class HearingAssessmentApp(ctk.CTk):
 
         # Manual input fields
         fields = [
-            ("病史 Case History", "CaseHistory", ""),
-            ("銷售型號 Sales Model", "SalesModel", ""),
-            ("價格 Price", "Price", ""),
             ("檢查人員 Inspector", "InspectorName", ""),
         ]
 
@@ -307,19 +364,22 @@ class HearingAssessmentApp(ctk.CTk):
 
         # Show XML parsed data summary
         if self.xml_data:
-            ctk.CTkLabel(self.frame_form, text="📊 從 XML 解析的數據", 
-                        font=ctk.CTkFont(size=12, weight="bold"),
-                        text_color="#17a2b8").pack(anchor="w", pady=(15, 5))
-
-            xml_preview = ctk.CTkTextbox(self.frame_form, height=100, font=ctk.CTkFont(size=11))
-            xml_preview.pack(fill="x", pady=5)
-
+            # Build preview text with all meaningful data
             preview_text = ""
+            skip_keys = ["Raw_FirstName", "Raw_LastName"]  # Skip internal keys
+            
             for key, value in self.xml_data.items():
-                if key.startswith("Speech_") or key.startswith("Tymp_"):
+                if key not in skip_keys and value:
                     preview_text += f"{key}: {value}\n"
 
-            if preview_text:
+            # Only show section if there's data to display
+            if preview_text.strip():
+                ctk.CTkLabel(self.frame_form, text="📊 從 XML 解析的數據", 
+                            font=ctk.CTkFont(size=12, weight="bold"),
+                            text_color="#17a2b8").pack(anchor="w", pady=(15, 5))
+
+                xml_preview = ctk.CTkTextbox(self.frame_form, height=150, font=ctk.CTkFont(size=11))
+                xml_preview.pack(fill="x", pady=5)
                 xml_preview.insert("1.0", preview_text)
                 xml_preview.configure(state="disabled")
 
@@ -341,11 +401,21 @@ class HearingAssessmentApp(ctk.CTk):
         for key, entry in self.manual_inputs.items():
             manual_data[key] = entry.get()
 
+        # Add otoscopy settings from radio buttons
+        manual_data["Otoscopy_Left_Clean"] = self.left_ear_clean.get()
+        manual_data["Otoscopy_Left_Intact"] = self.left_ear_intact.get()
+        manual_data["Otoscopy_Right_Clean"] = self.right_ear_clean.get()
+        manual_data["Otoscopy_Right_Intact"] = self.right_ear_intact.get()
+
         # Add image paths
         if self.selected_images["Left"]:
             manual_data["Otoscopy_Left_Image"] = self.selected_images["Left"]
         if self.selected_images["Right"]:
             manual_data["Otoscopy_Right_Image"] = self.selected_images["Right"]
+
+        # Default Speech Type to SRT (value=1) if not set
+        manual_data["Speech_Left_Type"] = "1"  # 1 = SRT
+        manual_data["Speech_Right_Type"] = "1"  # 1 = SRT
 
         # Merge with XML data
         full_payload = {**self.xml_data, **manual_data}
@@ -430,9 +500,6 @@ class HearingAssessmentApp(ctk.CTk):
 
         self.batch_defaults = {}
         defaults = [
-            ("預設病史", "DefaultCaseHistory"),
-            ("預設銷售型號", "DefaultSalesModel"),
-            ("預設價格", "DefaultPrice"),
             ("檢查人員姓名", "InspectorName"),
         ]
 
@@ -491,18 +558,40 @@ class HearingAssessmentApp(ctk.CTk):
             "password": self.entry_password.get()
         }
 
+        # Statistics tracking
+        success_count = 0
+        fail_count = 0
+        failed_files = []
+
+        # Create log file path in the batch folder
+        log_file_path = os.path.join(folder_path, "batch_log.txt")
+
         try:
             for i, filename in enumerate(files):
                 filepath = os.path.join(folder_path, filename)
-                self.after(0, lambda f=filename: self.lbl_progress.configure(text=f"處理中: {f}"))
+                self.after(0, lambda f=filename, idx=i+1, t=total: 
+                    self.lbl_progress.configure(text=f"處理中 ({idx}/{t}): {f}"))
 
                 try:
                     sessions = parse_noah_xml(filepath)
                     if not sessions:
+                        fail_count += 1
+                        error_msg = "無法解析 XML 檔案"
+                        failed_files.append((filename, error_msg))
                         continue
 
                     data = sessions[0]
                     data.update(defaults)
+
+                    # Add batch defaults for otoscopy (all True = normal)
+                    data["Otoscopy_Left_Clean"] = "True"
+                    data["Otoscopy_Left_Intact"] = "True"
+                    data["Otoscopy_Right_Clean"] = "True"
+                    data["Otoscopy_Right_Intact"] = "True"
+                    
+                    # Default Speech Type to SRT
+                    data["Speech_Left_Type"] = "1"
+                    data["Speech_Right_Type"] = "1"
 
                     # Auto-match images
                     base_name = os.path.splitext(filename)[0]
@@ -516,15 +605,40 @@ class HearingAssessmentApp(ctk.CTk):
 
                     auto = HearingAutomation(headless=True)
                     auto.run_automation(data, filepath, config)
+                    
+                    # Success
+                    success_count += 1
 
                 except Exception as e:
+                    fail_count += 1
+                    error_msg = str(e)
+                    failed_files.append((filename, error_msg))
                     print(f"Error processing {filename}: {e}")
 
                 prog = (i + 1) / total
                 self.after(0, lambda p=prog: self.progress_bar.set(p))
 
-            self.after(0, lambda: messagebox.showinfo("完成", f"已處理 {total} 個檔案"))
-            self.after(0, lambda: self.lbl_progress.configure(text="✅ 批次處理完成"))
+            # Write error log if there are failures
+            if failed_files:
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                with open(log_file_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"批次處理日誌 - {timestamp}\n")
+                    f.write(f"{'='*60}\n")
+                    f.write(f"成功: {success_count} | 失敗: {fail_count} | 總計: {total}\n\n")
+                    f.write("失敗檔案:\n")
+                    for fname, error in failed_files:
+                        f.write(f"  ❌ {fname}\n")
+                        f.write(f"     原因: {error}\n\n")
+
+            # Show summary dialog
+            summary = f"✅ 成功: {success_count}\n❌ 失敗: {fail_count}\n📊 總計: {total}"
+            if failed_files:
+                summary += f"\n\n錯誤日誌已儲存至:\n{log_file_path}"
+            
+            self.after(0, lambda: messagebox.showinfo("批次處理完成", summary))
+            self.after(0, lambda s=success_count, f=fail_count: 
+                self.lbl_progress.configure(text=f"✅ 完成 - 成功: {s}, 失敗: {f}"))
 
         except Exception as e:
             self.after(0, lambda: messagebox.showerror("錯誤", str(e)))
