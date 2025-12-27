@@ -433,6 +433,7 @@ class HearingAssessmentApp(ctk.CTk):
         manual_data = {}
         for key, entry in self.manual_inputs.items():
             manual_data[key] = entry.get()
+            self.log_status(f"📝 {key}: {entry.get()}")  # Debug in GUI log
 
         # Add otoscopy settings from radio buttons
         manual_data["Otoscopy_Left_Clean"] = self.left_ear_clean.get()

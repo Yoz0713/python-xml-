@@ -359,6 +359,19 @@ class HearingAutomation:
         print(f"TestDateY: '{data.get('TestDateY', 'NOT FOUND')}'")
         print(f"========================")
         
+        # CRITICAL: Fill InspectorName first (required field)
+        inspector_name = data.get("InspectorName", "")
+        if inspector_name:
+            try:
+                inspector_field = self.driver.find_element(By.ID, "InspectorName")
+                inspector_field.clear()
+                inspector_field.send_keys(str(inspector_name))
+                print(f"Filled InspectorName: {inspector_name}")
+            except Exception as e:
+                print(f"Error filling InspectorName: {e}")
+        else:
+            print("WARNING: InspectorName is empty!")
+        
         for field in FIELD_MAP:
             try:
                 # Determine value to input
