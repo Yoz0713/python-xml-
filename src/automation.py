@@ -192,6 +192,17 @@ class HearingAutomation:
         try:
             wait = WebDriverWait(self.driver, timeout)
             
+            # First, switch to "使用姓名+生日搜尋客戶" tab (it's the second li element)
+            try:
+                name_birthday_tab = wait.until(EC.element_to_be_clickable(
+                    (By.XPATH, "//ul/li[2]/a[contains(.//span, '使用姓名') or contains(.//span, '生日')]")
+                ))
+                name_birthday_tab.click()
+                print("Switched to Name+Birthday search mode")
+                time.sleep(1)
+            except Exception as e:
+                print(f"Could not find search mode tabs, trying direct: {e}")
+            
             # Wait for search form to be available
             name_field = wait.until(EC.presence_of_element_located((By.NAME, "QName")))
             
