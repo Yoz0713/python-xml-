@@ -756,6 +756,7 @@ class HearingAssessmentApp(ctk.CTk):
         threading.Thread(target=task).start()
 
     def reset_dashboard(self):
+        """Reset dashboard to initial state after successful upload."""
         self.detected_file = None
         self.xml_data = {}
         self.selected_images = {"Left": None, "Right": None}
@@ -763,9 +764,12 @@ class HearingAssessmentApp(ctk.CTk):
         self.lbl_patient_name.configure(text="等待偵測 XML 檔案...")
         self.lbl_patient_info.configure(text="")
         self.btn_process.configure(state="disabled")
-        self.btn_img_l.configure(text="📷 左耳圖像")
-        self.btn_img_r.configure(text="📷 右耳圖像")
-        self.populate_manual_form()
+        
+        # Clear the form area
+        for widget in self.frame_form.winfo_children():
+            widget.destroy()
+        
+        self.log_status("🔄 已重置，準備處理下一個檔案...")
 
     # =========================================================================
     # TAB 2: BATCH UPLOAD
