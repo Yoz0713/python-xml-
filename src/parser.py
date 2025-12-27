@@ -1,6 +1,31 @@
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
+def smart_clean_name(raw_first_name, raw_last_name):
+    """
+    Clean patient name by filtering out employee IDs (digit-only strings).
+    Audiologists often type their Employee ID into Name fields.
+    
+    Args:
+        raw_first_name (str): Raw first name from XML
+        raw_last_name (str): Raw last name from XML
+    
+    Returns:
+        str: Cleaned patient name (non-digit parts combined)
+    """
+    name_parts = []
+    
+    # Check FirstName - keep if not purely digits
+    if raw_first_name and not raw_first_name.strip().isdigit():
+        name_parts.append(raw_first_name.strip())
+    
+    # Check LastName - keep if not purely digits
+    if raw_last_name and not raw_last_name.strip().isdigit():
+        name_parts.append(raw_last_name.strip())
+    
+    # Combine remaining parts
+    return ''.join(name_parts)
+
 def parse_noah_xml(filepath):
     """
     Parses the NOAH XML file and extracts relevant data.
@@ -22,6 +47,40 @@ def parse_noah_xml(filepath):
         'pt': 'http://www.himsa.com/Measurement/PatientExport.xsd',
         'aud': 'http://www.himsa.com/Measurement/Audiogram',
         'imp': 'http://www.himsa.com/Measurement/Impedance'
+    }
+
+    # =========================================
+    # Extract Patient Info (Name, DOB)
+    # =========================================
+    patient_elem = root.find('.//pt:Patient/pt:Patient', ns)
+    if patient_elem is None:
+        patient_elem = root.find('.//pt:Patient', ns)
+    
+    raw_first_name = ""
+    raw_last_name = ""
+    birth_date = ""
+    
+    if patient_elem is not None:
+        first_name_elem = patient_elem.find('pt:FirstName', ns)
+        last_name_elem = patient_elem.find('pt:LastName', ns)
+        dob_elem = patient_elem.find('pt:DateofBirth', ns)
+        
+        if first_name_elem is not None and first_name_elem.text:
+            raw_first_name = first_name_elem.text
+        if last_name_elem is not None and last_name_elem.text:
+            raw_last_name = last_name_elem.text
+        if dob_elem is not None and dob_elem.text:
+            birth_date = dob_elem.text
+    
+    # Apply Smart Name Cleaning
+    target_patient_name = smart_clean_name(raw_first_name, raw_last_name)
+    
+    # Patient info to be added to each session
+    patient_info = {
+        "Target_Patient_Name": target_patient_name,
+        "Patient_BirthDate": birth_date,
+        "Raw_FirstName": raw_first_name,
+        "Raw_LastName": raw_last_name,
     }
 
     # Group actions by Date (YYYY-MM-DD)
@@ -180,7 +239,13 @@ def parse_noah_xml(filepath):
     # Convert dictionary values to list, sorted by date (reverse?)
     # Sort keys decending
     sorted_keys = sorted(grouped_data.keys(), reverse=True)
-    result = [grouped_data[k] for k in sorted_keys]
+    
+    # Add patient info to each session
+    result = []
+    for k in sorted_keys:
+        session = grouped_data[k]
+        session.update(patient_info)  # Add Target_Patient_Name, Patient_BirthDate, etc.
+        result.append(session)
 
     return result
 

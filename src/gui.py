@@ -10,107 +10,237 @@ from src.parser import parse_noah_xml
 from src.automation import HearingAutomation
 from src.config import FIELD_MAP
 
+# Set appearance mode and color theme
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
 class HearingAssessmentApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Hearing Assessment Automation (Dual-Mode)")
-        self.geometry("900x700")
+        self.title("🎧 聽力評估自動化工具")
+        self.geometry("1000x800")
+        self.minsize(900, 700)
 
         # Global State
         self.monitoring = False
         self.observer = None
         self.detected_file = None
         self.xml_data = {}
+        self.selected_images = {"Left": None, "Right": None}
 
-        # Layout
-        self.tab_view = ctk.CTkTabview(self)
-        self.tab_view.pack(fill="both", expand=True, padx=20, pady=20)
+        # Configure grid
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        self.tab_monitor = self.tab_view.add("Real-Time Monitor")
-        self.tab_batch = self.tab_view.add("Batch Upload")
+        # Main container
+        self.main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_container.grid(row=0, column=0, sticky="nsew", padx=15, pady=15)
+        self.main_container.grid_columnconfigure(0, weight=1)
+        self.main_container.grid_rowconfigure(1, weight=1)
+
+        # Header
+        self.setup_header()
+
+        # Tab View
+        self.tab_view = ctk.CTkTabview(self.main_container, corner_radius=10)
+        self.tab_view.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+
+        self.tab_monitor = self.tab_view.add("📡 即時監控")
+        self.tab_batch = self.tab_view.add("📦 批次上傳")
+        self.tab_settings = self.tab_view.add("⚙️ 設定")
 
         self.setup_monitor_tab()
         self.setup_batch_tab()
+        self.setup_settings_tab()
+
+    def setup_header(self):
+        """Setup the header with title and status"""
+        header = ctk.CTkFrame(self.main_container, fg_color="transparent", height=50)
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_columnconfigure(1, weight=1)
+
+        # Title
+        title = ctk.CTkLabel(header, text="🎧 聽力評估自動化工具", 
+                           font=ctk.CTkFont(size=24, weight="bold"))
+        title.grid(row=0, column=0, sticky="w")
+
+        # Global status indicator
+        self.global_status = ctk.CTkLabel(header, text="⏹️ 未啟動", 
+                                         font=ctk.CTkFont(size=14),
+                                         text_color="gray")
+        self.global_status.grid(row=0, column=2, sticky="e", padx=10)
 
     # =========================================================================
-    # TAB 1: REAL-TIME MONITOR (WATCHDOG)
+    # SETTINGS TAB (Shared Configuration)
+    # =========================================================================
+    def setup_settings_tab(self):
+        """Settings tab for CRM credentials"""
+        settings_frame = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
+        settings_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # CRM Settings Card
+        crm_card = ctk.CTkFrame(settings_frame, corner_radius=10)
+        crm_card.pack(fill="x", pady=10)
+
+        ctk.CTkLabel(crm_card, text="🔐 CRM 登入設定", 
+                    font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=20, pady=(15, 10))
+
+        # URL
+        url_frame = ctk.CTkFrame(crm_card, fg_color="transparent")
+        url_frame.pack(fill="x", padx=20, pady=5)
+        ctk.CTkLabel(url_frame, text="CRM 網址", width=100, anchor="w").pack(side="left")
+        self.entry_url = ctk.CTkEntry(url_frame, placeholder_text="https://crm.greattree.com.tw/...")
+        self.entry_url.pack(side="left", fill="x", expand=True, padx=(10, 0))
+        self.entry_url.insert(0, "https://crm.greattree.com.tw/")
+
+        # Username
+        user_frame = ctk.CTkFrame(crm_card, fg_color="transparent")
+        user_frame.pack(fill="x", padx=20, pady=5)
+        ctk.CTkLabel(user_frame, text="帳號 (工號)", width=100, anchor="w").pack(side="left")
+        self.entry_username = ctk.CTkEntry(user_frame, placeholder_text="請輸入您的工號")
+        self.entry_username.pack(side="left", fill="x", expand=True, padx=(10, 0))
+
+        # Password
+        pass_frame = ctk.CTkFrame(crm_card, fg_color="transparent")
+        pass_frame.pack(fill="x", padx=20, pady=(5, 15))
+        ctk.CTkLabel(pass_frame, text="密碼", width=100, anchor="w").pack(side="left")
+        self.entry_password = ctk.CTkEntry(pass_frame, placeholder_text="請輸入您的密碼", show="●")
+        self.entry_password.pack(side="left", fill="x", expand=True, padx=(10, 0))
+
+        # Save hint
+        ctk.CTkLabel(crm_card, text="💡 設定會在啟動自動化時使用", 
+                    text_color="gray", font=ctk.CTkFont(size=12)).pack(anchor="w", padx=20, pady=(0, 15))
+
+    # =========================================================================
+    # TAB 1: REAL-TIME MONITOR
     # =========================================================================
     def setup_monitor_tab(self):
-        # Top Bar: Controls
-        frame_top = ctk.CTkFrame(self.tab_monitor)
-        frame_top.pack(fill="x", pady=10)
+        self.tab_monitor.grid_columnconfigure(0, weight=1)
+        self.tab_monitor.grid_rowconfigure(2, weight=1)
 
-        self.btn_monitor = ctk.CTkButton(frame_top, text="Start Monitoring", command=self.toggle_monitoring)
-        self.btn_monitor.pack(side="left", padx=10)
+        # Control Bar
+        control_bar = ctk.CTkFrame(self.tab_monitor, corner_radius=10)
+        control_bar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        control_bar.grid_columnconfigure(1, weight=1)
 
-        self.lbl_status = ctk.CTkLabel(frame_top, text="Status: Stopped", text_color="red")
-        self.lbl_status.pack(side="left", padx=10)
+        self.btn_monitor = ctk.CTkButton(control_bar, text="▶️ 開始監控", 
+                                        width=140, height=40,
+                                        font=ctk.CTkFont(size=14, weight="bold"),
+                                        command=self.toggle_monitoring)
+        self.btn_monitor.grid(row=0, column=0, padx=15, pady=15)
 
-        # User Config (Shared)
-        frame_config = ctk.CTkFrame(self.tab_monitor)
-        frame_config.pack(fill="x", pady=5)
-        ctk.CTkLabel(frame_config, text="CRM URL:").pack(side="left", padx=5)
-        self.entry_url = ctk.CTkEntry(frame_config, width=300)
-        self.entry_url.pack(side="left", padx=5)
-        # Placeholder: pre-fill
-        self.entry_url.insert(0, "https://crm.greattree.com.tw/...")
+        self.lbl_status = ctk.CTkLabel(control_bar, text="選擇資料夾開始監控", 
+                                      font=ctk.CTkFont(size=13))
+        self.lbl_status.grid(row=0, column=1, sticky="w", padx=10)
 
-        # Dashboard Area (Hidden initially)
-        self.frame_dashboard = ctk.CTkFrame(self.tab_monitor)
-        self.frame_dashboard.pack(fill="both", expand=True, pady=10)
+        self.lbl_folder = ctk.CTkLabel(control_bar, text="", text_color="gray",
+                                       font=ctk.CTkFont(size=12))
+        self.lbl_folder.grid(row=0, column=2, sticky="e", padx=15)
 
-        self.lbl_new_file = ctk.CTkLabel(self.frame_dashboard, text="Waiting for new files...", font=("Arial", 16))
-        self.lbl_new_file.pack(pady=20)
+        # Patient Info Card (Shows when file detected)
+        self.patient_card = ctk.CTkFrame(self.tab_monitor, corner_radius=10)
+        self.patient_card.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        self.patient_card.grid_columnconfigure(1, weight=1)
 
-        # Dynamic Form Area
-        self.frame_form = ctk.CTkScrollableFrame(self.frame_dashboard, height=300)
-        # We will populate this when a file is detected
+        self.lbl_patient_icon = ctk.CTkLabel(self.patient_card, text="👤", 
+                                            font=ctk.CTkFont(size=32))
+        self.lbl_patient_icon.grid(row=0, column=0, rowspan=2, padx=15, pady=15)
 
-        # Action Buttons
-        self.btn_process = ctk.CTkButton(self.frame_dashboard, text="Upload & Process", state="disabled", command=self.process_single_file)
-        self.btn_process.pack(pady=10)
+        self.lbl_patient_name = ctk.CTkLabel(self.patient_card, text="等待偵測 XML 檔案...", 
+                                            font=ctk.CTkFont(size=18, weight="bold"))
+        self.lbl_patient_name.grid(row=0, column=1, sticky="sw", padx=5)
 
-        # Status Log Area
-        self.log_frame = ctk.CTkFrame(self.tab_monitor)
-        self.log_frame.pack(fill="both", expand=True, pady=10)
+        self.lbl_patient_info = ctk.CTkLabel(self.patient_card, text="", 
+                                            text_color="gray", font=ctk.CTkFont(size=13))
+        self.lbl_patient_info.grid(row=1, column=1, sticky="nw", padx=5)
 
-        ctk.CTkLabel(self.log_frame, text="執行狀態 / Execution Status", font=("Arial", 14, "bold")).pack(anchor="w", padx=5)
+        self.btn_process = ctk.CTkButton(self.patient_card, text="🚀 上傳到 CRM", 
+                                        width=130, height=36, state="disabled",
+                                        fg_color="#28a745", hover_color="#218838",
+                                        command=self.process_single_file)
+        self.btn_process.grid(row=0, column=2, rowspan=2, padx=15, pady=15)
 
-        self.log_text = ctk.CTkTextbox(self.log_frame, height=150)
-        self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
+        # Main Content Area (Two columns)
+        content_area = ctk.CTkFrame(self.tab_monitor, fg_color="transparent")
+        content_area.grid(row=2, column=0, sticky="nsew")
+        content_area.grid_columnconfigure(0, weight=1)
+        content_area.grid_columnconfigure(1, weight=1)
+        content_area.grid_rowconfigure(0, weight=1)
+
+        # Left Column - Manual Input Form
+        form_card = ctk.CTkFrame(content_area, corner_radius=10)
+        form_card.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+
+        ctk.CTkLabel(form_card, text="📝 手動輸入欄位", 
+                    font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=15, pady=(15, 10))
+
+        self.frame_form = ctk.CTkScrollableFrame(form_card, fg_color="transparent")
+        self.frame_form.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # Image selectors
+        img_frame = ctk.CTkFrame(form_card, fg_color="transparent")
+        img_frame.pack(fill="x", padx=15, pady=(0, 15))
+
+        self.btn_img_l = ctk.CTkButton(img_frame, text="📷 左耳圖像", width=120,
+                                       fg_color="#6c757d", hover_color="#5a6268",
+                                       command=lambda: self.select_img("Left"))
+        self.btn_img_l.pack(side="left", padx=(0, 10))
+
+        self.btn_img_r = ctk.CTkButton(img_frame, text="📷 右耳圖像", width=120,
+                                       fg_color="#6c757d", hover_color="#5a6268",
+                                       command=lambda: self.select_img("Right"))
+        self.btn_img_r.pack(side="left")
+
+        # Right Column - Status Log
+        log_card = ctk.CTkFrame(content_area, corner_radius=10)
+        log_card.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+
+        ctk.CTkLabel(log_card, text="📋 執行狀態", 
+                    font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=15, pady=(15, 10))
+
+        self.log_text = ctk.CTkTextbox(log_card, font=ctk.CTkFont(size=12))
+        self.log_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # Initialize form with empty state
+        self.populate_manual_form()
 
     def toggle_monitoring(self):
         if not self.monitoring:
-            # Start
-            path = filedialog.askdirectory(title="Select Folder to Monitor")
-            if not path: return
+            path = filedialog.askdirectory(title="選擇要監控的資料夾")
+            if not path:
+                return
 
             self.monitoring = True
-            self.btn_monitor.configure(text="Stop Monitoring", fg_color="red")
-            self.lbl_status.configure(text=f"Monitoring: {path}", text_color="green")
+            self.btn_monitor.configure(text="⏹️ 停止監控", fg_color="#dc3545", hover_color="#c82333")
+            self.lbl_status.configure(text="🟢 監控中...")
+            self.lbl_folder.configure(text=f"📁 {path}")
+            self.global_status.configure(text="🟢 監控中", text_color="#28a745")
 
             # Start Watchdog
             event_handler = NewFileHandler(self)
             self.observer = Observer()
             self.observer.schedule(event_handler, path, recursive=False)
             self.observer.start()
+            self.log_status(f"開始監控: {path}")
         else:
-            # Stop
             self.monitoring = False
-            self.btn_monitor.configure(text="Start Monitoring", fg_color="#1f6aa5")
-            self.lbl_status.configure(text="Status: Stopped", text_color="red")
+            self.btn_monitor.configure(text="▶️ 開始監控", fg_color="#1f6aa5", hover_color="#144870")
+            self.lbl_status.configure(text="⏹️ 已停止")
+            self.lbl_folder.configure(text="")
+            self.global_status.configure(text="⏹️ 未啟動", text_color="gray")
+
             if self.observer:
                 self.observer.stop()
                 self.observer.join()
+            self.log_status("監控已停止")
 
     def on_new_file_detected(self, filepath):
-        """Called by Watchdog Thread. Use after() to update GUI."""
         if filepath.endswith(".xml"):
             self.after(0, lambda: self.load_file_to_dashboard(filepath))
 
     def load_file_to_dashboard(self, filepath):
-        # Bring window to front when minimized
+        # Bring window to front
         self.deiconify()
         self.lift()
         self.attributes('-topmost', True)
@@ -118,149 +248,217 @@ class HearingAssessmentApp(ctk.CTk):
         self.focus_force()
 
         self.detected_file = filepath
-        self.lbl_new_file.configure(text=f"New File Detected: {os.path.basename(filepath)}")
         self.log_status(f"偵測到新檔案: {os.path.basename(filepath)}")
 
-        # Parse
         try:
             sessions = parse_noah_xml(filepath)
             if sessions:
-                self.xml_data = sessions[0] # Default to most recent
-                # TODO: Allow selecting session if multiple
+                self.xml_data = sessions[0]
 
-                # Show Form
-                self.frame_form.pack(fill="both", expand=True, pady=10)
+                # Update patient card
+                patient_name = self.xml_data.get("Target_Patient_Name", "未知病患")
+                birth_date = self.xml_data.get("Patient_BirthDate", "")
+                test_date = self.xml_data.get("FullTestDate", "")
+
+                self.lbl_patient_name.configure(text=f"👤 {patient_name}")
+                self.lbl_patient_info.configure(text=f"生日: {birth_date} | 檔案: {os.path.basename(filepath)}")
+
                 self.populate_manual_form()
                 self.btn_process.configure(state="normal")
+                self.log_status(f"解析成功: {patient_name}")
             else:
-                 self.lbl_new_file.configure(text=f"Error: No sessions in {os.path.basename(filepath)}")
+                self.lbl_patient_name.configure(text="⚠️ 無法解析檔案")
+                self.lbl_patient_info.configure(text=os.path.basename(filepath))
         except Exception as e:
-            self.lbl_new_file.configure(text=f"Error Parsing: {e}")
+            self.lbl_patient_name.configure(text="❌ 解析錯誤")
+            self.lbl_patient_info.configure(text=str(e))
+            self.log_status(f"錯誤: {e}")
 
     def populate_manual_form(self):
         # Clear existing
         for widget in self.frame_form.winfo_children():
             widget.destroy()
 
-        # Add Manual Fields (Case History, Sales, Price) as requested
-        # Plus Otoscopy fields
-
+        # Manual input fields
         fields = [
-            ("Case History", "Text"),
-            ("Sales Model", "Text"),
-            ("Price", "Text"),
-            ("Inspector Name", "Text")
+            ("病史 Case History", "CaseHistory", ""),
+            ("銷售型號 Sales Model", "SalesModel", ""),
+            ("價格 Price", "Price", ""),
+            ("檢查人員 Inspector", "InspectorName", ""),
         ]
 
         self.manual_inputs = {}
 
-        for name, ftype in fields:
-            row = ctk.CTkFrame(self.frame_form)
-            row.pack(fill="x", pady=2)
-            ctk.CTkLabel(row, text=name, width=150, anchor="w").pack(side="left", padx=5)
-            entry = ctk.CTkEntry(row)
-            entry.pack(side="left", fill="x", expand=True, padx=5)
-            self.manual_inputs[name] = entry
+        for label, key, default in fields:
+            row = ctk.CTkFrame(self.frame_form, fg_color="transparent")
+            row.pack(fill="x", pady=5)
 
-        # Add Image Selectors
-        img_row = ctk.CTkFrame(self.frame_form)
-        img_row.pack(fill="x", pady=10)
-        self.btn_img_l = ctk.CTkButton(img_row, text="Select Left Image", command=lambda: self.select_img("Left"))
-        self.btn_img_l.pack(side="left", padx=5)
-        self.btn_img_r = ctk.CTkButton(img_row, text="Select Right Image", command=lambda: self.select_img("Right"))
-        self.btn_img_r.pack(side="left", padx=5)
+            ctk.CTkLabel(row, text=label, width=160, anchor="w",
+                        font=ctk.CTkFont(size=12)).pack(side="left")
+
+            entry = ctk.CTkEntry(row, placeholder_text=f"輸入{label.split()[0]}")
+            entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
+
+            # Pre-fill from xml_data if available
+            if key in self.xml_data:
+                entry.insert(0, str(self.xml_data[key]))
+
+            self.manual_inputs[key] = entry
+
+        # Show XML parsed data summary
+        if self.xml_data:
+            ctk.CTkLabel(self.frame_form, text="📊 從 XML 解析的數據", 
+                        font=ctk.CTkFont(size=12, weight="bold"),
+                        text_color="#17a2b8").pack(anchor="w", pady=(15, 5))
+
+            xml_preview = ctk.CTkTextbox(self.frame_form, height=100, font=ctk.CTkFont(size=11))
+            xml_preview.pack(fill="x", pady=5)
+
+            preview_text = ""
+            for key, value in self.xml_data.items():
+                if key.startswith("Speech_") or key.startswith("Tymp_"):
+                    preview_text += f"{key}: {value}\n"
+
+            if preview_text:
+                xml_preview.insert("1.0", preview_text)
+                xml_preview.configure(state="disabled")
 
     def select_img(self, side):
-        path = filedialog.askopenfilename(filetypes=[("Images", "*.jpg *.png")])
+        path = filedialog.askopenfilename(filetypes=[("Images", "*.jpg *.png *.jpeg")])
         if path:
-            print(f"Selected {side}: {path}")
-            # TODO: Store path in self.xml_data or separate dict
+            self.selected_images[side] = path
+            self.log_status(f"已選擇 {side} 耳圖像: {os.path.basename(path)}")
+
+            # Update button text
+            if side == "Left":
+                self.btn_img_l.configure(text=f"✅ 左耳: {os.path.basename(path)[:10]}...")
+            else:
+                self.btn_img_r.configure(text=f"✅ 右耳: {os.path.basename(path)[:10]}...")
 
     def process_single_file(self):
-        # Gather data from manual inputs
-        manual_data = {
-            "InspectorName": self.manual_inputs["Inspector Name"].get(),
-            # ... others
-        }
+        # Gather manual data
+        manual_data = {}
+        for key, entry in self.manual_inputs.items():
+            manual_data[key] = entry.get()
 
-        # Merge
+        # Add image paths
+        if self.selected_images["Left"]:
+            manual_data["Otoscopy_Left_Image"] = self.selected_images["Left"]
+        if self.selected_images["Right"]:
+            manual_data["Otoscopy_Right_Image"] = self.selected_images["Right"]
+
+        # Merge with XML data
         full_payload = {**self.xml_data, **manual_data}
 
-        # Run Automation
         self.run_automation_task(full_payload, self.detected_file)
 
     def log_status(self, message):
-        """在狀態日誌區顯示訊息"""
         timestamp = time.strftime("%H:%M:%S")
         self.log_text.insert("end", f"[{timestamp}] {message}\n")
-        self.log_text.see("end")  # 自動滾動到最新
+        self.log_text.see("end")
+        self.update_idletasks()
 
     def run_automation_task(self, payload, filepath):
-        # Threaded execution
         def task():
-            self.after(0, lambda: self.log_status("開始處理..."))
+            self.after(0, lambda: self.log_status("🚀 開始處理..."))
+            self.after(0, lambda: self.btn_process.configure(state="disabled"))
+
             config = {
                 "url": self.entry_url.get(),
-                "username": "admin", # TODO: Add inputs for these
-                "password": "password"
+                "username": self.entry_username.get(),
+                "password": self.entry_password.get()
             }
+
             try:
-                # Per requirements: "Workflow: Setup: Headless Chrome".
-                # For Monitor mode, user already did manual entry, so automation can be headless.
-                self.after(0, lambda: self.log_status("正在啟動自動化 (Headless Chrome)..."))
+                self.after(0, lambda: self.log_status("🔐 正在登入 CRM..."))
                 auto = HearingAutomation(headless=True)
-                self.after(0, lambda: self.log_status("正在填寫表單並上傳..."))
+
+                self.after(0, lambda: self.log_status("🔍 正在搜尋病患..."))
                 auto.run_automation(payload, filepath, config)
-                self.after(0, lambda: messagebox.showinfo("Success", "Processing Complete"))
+
+                self.after(0, lambda: messagebox.showinfo("成功", "✅ 處理完成！"))
                 self.after(0, lambda: self.log_status("✅ 上傳成功！"))
                 self.after(0, self.reset_dashboard)
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Error", str(e)))
+                self.after(0, lambda: messagebox.showerror("錯誤", str(e)))
                 self.after(0, lambda: self.log_status(f"❌ 錯誤: {e}"))
+                self.after(0, lambda: self.btn_process.configure(state="normal"))
 
         threading.Thread(target=task).start()
 
     def reset_dashboard(self):
         self.detected_file = None
-        self.lbl_new_file.configure(text="Waiting for new files...")
-        self.frame_form.pack_forget()
+        self.xml_data = {}
+        self.selected_images = {"Left": None, "Right": None}
+
+        self.lbl_patient_name.configure(text="等待偵測 XML 檔案...")
+        self.lbl_patient_info.configure(text="")
         self.btn_process.configure(state="disabled")
+        self.btn_img_l.configure(text="📷 左耳圖像")
+        self.btn_img_r.configure(text="📷 右耳圖像")
+        self.populate_manual_form()
 
     # =========================================================================
-    # TAB 2: BATCH UPLOAD (THE CLEANER)
+    # TAB 2: BATCH UPLOAD
     # =========================================================================
     def setup_batch_tab(self):
-        # Folder Selection
-        frame_folder = ctk.CTkFrame(self.tab_batch)
-        frame_folder.pack(fill="x", pady=10)
-        self.entry_batch_path = ctk.CTkEntry(frame_folder, placeholder_text="Folder Path")
-        self.entry_batch_path.pack(side="left", fill="x", expand=True, padx=5)
-        ctk.CTkButton(frame_folder, text="Browse", command=self.browse_batch_folder).pack(side="left", padx=5)
+        self.tab_batch.grid_columnconfigure(0, weight=1)
+        self.tab_batch.grid_rowconfigure(1, weight=1)
 
-        # Default Values
-        frame_defaults = ctk.CTkFrame(self.tab_batch)
-        frame_defaults.pack(fill="x", pady=10)
-        ctk.CTkLabel(frame_defaults, text="Batch Defaults", font=("Arial", 14, "bold")).pack(anchor="w", padx=5)
+        # Folder Selection Card
+        folder_card = ctk.CTkFrame(self.tab_batch, corner_radius=10)
+        folder_card.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        folder_card.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(folder_card, text="📁", font=ctk.CTkFont(size=24)).grid(row=0, column=0, padx=15, pady=15)
+
+        self.entry_batch_path = ctk.CTkEntry(folder_card, placeholder_text="選擇包含 XML 檔案的資料夾...")
+        self.entry_batch_path.grid(row=0, column=1, sticky="ew", padx=5, pady=15)
+
+        ctk.CTkButton(folder_card, text="瀏覽", width=80, 
+                     command=self.browse_batch_folder).grid(row=0, column=2, padx=(5, 15), pady=15)
+
+        # Defaults Card
+        defaults_card = ctk.CTkFrame(self.tab_batch, corner_radius=10)
+        defaults_card.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
+
+        ctk.CTkLabel(defaults_card, text="⚙️ 批次預設值", 
+                    font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=15, pady=(15, 10))
+
+        defaults_frame = ctk.CTkScrollableFrame(defaults_card, fg_color="transparent")
+        defaults_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         self.batch_defaults = {}
-        defaults_to_set = ["Default Case History", "Default Sales Model", "Default Price", "Inspector Name"]
+        defaults = [
+            ("預設病史", "DefaultCaseHistory"),
+            ("預設銷售型號", "DefaultSalesModel"),
+            ("預設價格", "DefaultPrice"),
+            ("檢查人員姓名", "InspectorName"),
+        ]
 
-        for name in defaults_to_set:
-            row = ctk.CTkFrame(frame_defaults)
-            row.pack(fill="x", pady=2)
-            ctk.CTkLabel(row, text=name, width=150, anchor="w").pack(side="left", padx=5)
-            entry = ctk.CTkEntry(row)
-            entry.pack(side="left", fill="x", expand=True, padx=5)
-            self.batch_defaults[name] = entry
+        for label, key in defaults:
+            row = ctk.CTkFrame(defaults_frame, fg_color="transparent")
+            row.pack(fill="x", pady=5)
+            ctk.CTkLabel(row, text=label, width=140, anchor="w").pack(side="left")
+            entry = ctk.CTkEntry(row, placeholder_text=f"輸入{label}")
+            entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
+            self.batch_defaults[key] = entry
 
-        # Progress
-        self.progress_bar = ctk.CTkProgressBar(self.tab_batch)
+        # Progress Area
+        progress_card = ctk.CTkFrame(self.tab_batch, corner_radius=10)
+        progress_card.grid(row=2, column=0, sticky="ew")
+
+        self.progress_bar = ctk.CTkProgressBar(progress_card)
         self.progress_bar.set(0)
-        self.progress_bar.pack(fill="x", pady=20, padx=20)
+        self.progress_bar.pack(fill="x", padx=20, pady=15)
 
-        # Start Button
-        self.btn_start_batch = ctk.CTkButton(self.tab_batch, text="Start Batch Processing", command=self.start_batch)
-        self.btn_start_batch.pack(pady=10)
+        self.lbl_progress = ctk.CTkLabel(progress_card, text="準備就緒", text_color="gray")
+        self.lbl_progress.pack(pady=(0, 5))
+
+        self.btn_start_batch = ctk.CTkButton(progress_card, text="🚀 開始批次處理", 
+                                            height=40, font=ctk.CTkFont(size=14, weight="bold"),
+                                            command=self.start_batch)
+        self.btn_start_batch.pack(pady=(0, 15))
 
     def browse_batch_folder(self):
         p = filedialog.askdirectory()
@@ -271,15 +469,11 @@ class HearingAssessmentApp(ctk.CTk):
     def start_batch(self):
         path = self.entry_batch_path.get()
         if not path or not os.path.exists(path):
-            messagebox.showerror("Error", "Invalid Folder Path")
+            messagebox.showerror("錯誤", "請選擇有效的資料夾路徑")
             return
 
-        # Disable UI
         self.btn_start_batch.configure(state="disabled")
-
-        # Get defaults
         defaults = {k: v.get() for k, v in self.batch_defaults.items()}
-
         threading.Thread(target=self.run_batch_logic, args=(path, defaults)).start()
 
     def run_batch_logic(self, folder_path, defaults):
@@ -287,76 +481,53 @@ class HearingAssessmentApp(ctk.CTk):
         total = len(files)
 
         if total == 0:
-            self.after(0, lambda: messagebox.showinfo("Info", "No XML files found."))
+            self.after(0, lambda: messagebox.showinfo("資訊", "找不到 XML 檔案"))
             self.after(0, lambda: self.btn_start_batch.configure(state="normal"))
             return
 
         config = {
-            "url": "https://crm.greattree.com.tw/...", # TODO: Get from shared config
-            "username": "admin",
-            "password": "password"
+            "url": self.entry_url.get(),
+            "username": self.entry_username.get(),
+            "password": self.entry_password.get()
         }
 
-        # Shared automation instance? Or new one per file?
-        # New one per file is safer if they crash, but slower.
-        # Single instance is faster. Let's try single instance.
-
         try:
-            # auto = HearingAutomation(headless=True) # Silent mode
-            # CHANGE: Instantiate inside loop because run_automation closes the driver.
-
             for i, filename in enumerate(files):
                 filepath = os.path.join(folder_path, filename)
+                self.after(0, lambda f=filename: self.lbl_progress.configure(text=f"處理中: {f}"))
 
                 try:
-                    # 1. Parse
                     sessions = parse_noah_xml(filepath)
                     if not sessions:
-                        print(f"Skipping {filename}: No sessions.")
-                        continue # Or move to Failed
+                        continue
 
                     data = sessions[0]
+                    data.update(defaults)
 
-                    # 2. Auto-match Images
-                    # Look for [Mobile]_L.jpg in same folder
+                    # Auto-match images
                     base_name = os.path.splitext(filename)[0]
-                    # Logic: if filename is "PatientA.xml", look for "PatientA_L.jpg"?
-                    # Prompt says: Look for `[Mobile]_L.jpg`
-                    # Assuming Mobile is part of filename? Or specific pattern?
-                    # "Look for [Mobile]_L.jpg / [Mobile]_R.jpg"
-                    # I'll implement a simple check for matching prefix
+                    for ext in [".jpg", ".png", ".jpeg"]:
+                        l_img = os.path.join(folder_path, f"{base_name}_L{ext}")
+                        r_img = os.path.join(folder_path, f"{base_name}_R{ext}")
+                        if os.path.exists(l_img):
+                            data["Otoscopy_Left_Image"] = l_img
+                        if os.path.exists(r_img):
+                            data["Otoscopy_Right_Image"] = r_img
 
-                    l_img = os.path.join(folder_path, f"{base_name}_L.jpg")
-                    if os.path.exists(l_img):
-                        data["Otoscopy_Left_Image"] = l_img
-
-                    r_img = os.path.join(folder_path, f"{base_name}_R.jpg")
-                    if os.path.exists(r_img):
-                        data["Otoscopy_Right_Image"] = r_img
-
-                    # 3. Apply Defaults
-                    # Merge defaults into data
-                    # Map "Default Case History" -> "CaseHistory" key
-                    # ...
-                    data["InspectorName"] = defaults.get("Inspector Name")
-
-                    # 4. Run Automation
-                    # Create new instance for each file to ensure fresh driver
                     auto = HearingAutomation(headless=True)
                     auto.run_automation(data, filepath, config)
 
                 except Exception as e:
                     print(f"Error processing {filename}: {e}")
-                    # Move to Failed is handled inside run_automation if filepath is passed
 
-                # Update Progress
                 prog = (i + 1) / total
                 self.after(0, lambda p=prog: self.progress_bar.set(p))
 
-            self.after(0, lambda: messagebox.showinfo("Batch Complete", f"Processed {total} files."))
+            self.after(0, lambda: messagebox.showinfo("完成", f"已處理 {total} 個檔案"))
+            self.after(0, lambda: self.lbl_progress.configure(text="✅ 批次處理完成"))
 
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Batch Error", str(e)))
+            self.after(0, lambda: messagebox.showerror("錯誤", str(e)))
         finally:
             self.after(0, lambda: self.btn_start_batch.configure(state="normal"))
 
@@ -367,9 +538,9 @@ class NewFileHandler(FileSystemEventHandler):
 
     def on_created(self, event):
         if not event.is_directory:
-             self.app.on_new_file_detected(event.src_path)
+            self.app.on_new_file_detected(event.src_path)
+
 
 if __name__ == "__main__":
-    ctk.set_appearance_mode("System")
     app = HearingAssessmentApp()
     app.mainloop()
