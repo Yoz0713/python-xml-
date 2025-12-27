@@ -71,6 +71,15 @@ class HearingAssessmentApp(ctk.CTk):
         self.btn_process = ctk.CTkButton(self.frame_dashboard, text="Upload & Process", state="disabled", command=self.process_single_file)
         self.btn_process.pack(pady=10)
 
+        # Status Log Area
+        self.log_frame = ctk.CTkFrame(self.tab_monitor)
+        self.log_frame.pack(fill="both", expand=True, pady=10)
+
+        ctk.CTkLabel(self.log_frame, text="執行狀態 / Execution Status", font=("Arial", 14, "bold")).pack(anchor="w", padx=5)
+
+        self.log_text = ctk.CTkTextbox(self.log_frame, height=150)
+        self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
+
     def toggle_monitoring(self):
         if not self.monitoring:
             # Start
@@ -101,8 +110,16 @@ class HearingAssessmentApp(ctk.CTk):
             self.after(0, lambda: self.load_file_to_dashboard(filepath))
 
     def load_file_to_dashboard(self, filepath):
+        # Bring window to front when minimized
+        self.deiconify()
+        self.lift()
+        self.attributes('-topmost', True)
+        self.after(100, lambda: self.attributes('-topmost', False))
+        self.focus_force()
+
         self.detected_file = filepath
         self.lbl_new_file.configure(text=f"New File Detected: {os.path.basename(filepath)}")
+        self.log_status(f"偵測到新檔案: {os.path.basename(filepath)}")
 
         # Parse
         try:
@@ -172,9 +189,16 @@ class HearingAssessmentApp(ctk.CTk):
         # Run Automation
         self.run_automation_task(full_payload, self.detected_file)
 
+    def log_status(self, message):
+        """在狀態日誌區顯示訊息"""
+        timestamp = time.strftime("%H:%M:%S")
+        self.log_text.insert("end", f"[{timestamp}] {message}\n")
+        self.log_text.see("end")  # 自動滾動到最新
+
     def run_automation_task(self, payload, filepath):
         # Threaded execution
         def task():
+            self.after(0, lambda: self.log_status("開始處理..."))
             config = {
                 "url": self.entry_url.get(),
                 "username": "admin", # TODO: Add inputs for these
@@ -183,12 +207,16 @@ class HearingAssessmentApp(ctk.CTk):
             try:
                 # Per requirements: "Workflow: Setup: Headless Chrome".
                 # For Monitor mode, user already did manual entry, so automation can be headless.
+                self.after(0, lambda: self.log_status("正在啟動自動化 (Headless Chrome)..."))
                 auto = HearingAutomation(headless=True)
+                self.after(0, lambda: self.log_status("正在填寫表單並上傳..."))
                 auto.run_automation(payload, filepath, config)
                 self.after(0, lambda: messagebox.showinfo("Success", "Processing Complete"))
+                self.after(0, lambda: self.log_status("✅ 上傳成功！"))
                 self.after(0, self.reset_dashboard)
             except Exception as e:
                 self.after(0, lambda: messagebox.showerror("Error", str(e)))
+                self.after(0, lambda: self.log_status(f"❌ 錯誤: {e}"))
 
         threading.Thread(target=task).start()
 
