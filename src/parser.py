@@ -194,10 +194,15 @@ def parse_noah_xml(filepath: str) -> List[Dict[str, Any]]:
                 for pt_node in tone_block.findall('.//TonePoints'):
                     freq = get_float(pt_node, 'StimulusFrequency')
                     level = get_float(pt_node, 'StimulusLevel')
+                    status = get_text(pt_node, 'TonePointStatus') or ""
                     
                     if freq is not None and level is not None:
                         key = f"PTA_{side}_{cond_type}_{int(freq)}"
-                        current_session[key] = str(int(level))
+                        # Add NR suffix if TonePointStatus is NoResponse
+                        if status.lower() == 'noresponse':
+                            current_session[key] = f"{int(level)}NR"
+                        else:
+                            current_session[key] = str(int(level))
             
             # --- UCL (Uncomfortable Level) ---
             for ucl_block in action.findall('.//UncomfortableLevel'):
@@ -286,11 +291,6 @@ def parse_noah_xml(filepath: str) -> List[Dict[str, Any]]:
             # Find TympanogramTest block
             tymp_test = action.find('.//TympanogramTest')
             if tymp_test is not None:
-                # Peak Pressure
-                pressure = get_float(tymp_test, 'Pressure')
-                if pressure is not None:
-                    current_session[f"Tymp_{side}_Pressure"] = str(int(pressure))
-                
                 # Canal Volume (ECV)
                 cv_node = tymp_test.find('.//CanalVolume')
                 if cv_node is not None:
@@ -301,15 +301,42 @@ def parse_noah_xml(filepath: str) -> List[Dict[str, Any]]:
                             cv_val = round(cv_val / 100, 2)
                         current_session[f"Tymp_{side}_Vol"] = str(cv_val)
                 
-                # Peak Compliance
+                # Peak Compliance (MaximumCompliance)
                 mc_node = tymp_test.find('.//MaximumCompliance')
+                peak_compliance = None
                 if mc_node is not None:
                     mc_val = get_float(mc_node, 'ArgumentCompliance1')
                     if mc_val is not None:
                         # Normalize: divide by 100 if > 5
                         if mc_val > 5:
                             mc_val = round(mc_val / 100, 2)
+                        peak_compliance = mc_val
                         current_session[f"Tymp_{side}_Compliance"] = str(mc_val)
+                
+                # Peak Pressure - Find the CompliancePoint with the maximum compliance
+                # The correct peak pressure is the pressure at the point of maximum compliance
+                all_compliance_points = tymp_test.findall('.//CompliancePoint')
+                
+                if all_compliance_points:
+                    max_compliance = -1
+                    peak_pressure = None
+                    
+                    for cp in all_compliance_points:
+                        pressure = get_float(cp, 'Pressure')
+                        comp_node = cp.find('.//Compliance')
+                        if comp_node is not None:
+                            compliance = get_float(comp_node, 'ArgumentCompliance1')
+                            if compliance is not None and compliance > max_compliance:
+                                max_compliance = compliance
+                                peak_pressure = pressure
+                    
+                    if peak_pressure is not None:
+                        current_session[f"Tymp_{side}_Pressure"] = str(int(peak_pressure))
+                else:
+                    # Fallback to direct Pressure tag if no CompliancePoints
+                    pressure = get_float(tymp_test, 'Pressure')
+                    if pressure is not None:
+                        current_session[f"Tymp_{side}_Pressure"] = str(int(pressure))
                 
                 # Auto-classify Type
                 pressure_val = current_session.get(f"Tymp_{side}_Pressure")
