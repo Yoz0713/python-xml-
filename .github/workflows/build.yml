@@ -35,10 +35,10 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller --noconsole --onefile --name HearingAssessmentTool --paths . --add-data "${{ steps.ctk_path.outputs.path }};customtkinter/" src/main.py
+        pyinstaller --noconsole --onefile --name HearingAssessmentTool-DualMode --paths . --add-data "${{ steps.ctk_path.outputs.path }};customtkinter/" src/main.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: HearingAssessmentTool-Exe
-        path: dist/HearingAssessmentTool.exe
+        name: HearingAssessmentTool-DualMode-Exe
+        path: dist/HearingAssessmentTool-DualMode.exe
