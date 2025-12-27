@@ -68,12 +68,14 @@ class HearingAutomation:
                 # Fill Form
                 self.fill_form(data_payload)
 
-                # Submit (Placeholder - often user wants manual verification first, but batch mode implies auto)
-                # self.driver.find_element(By.ID, "SubmitBtn").click()
-                print("Form filled. Submitting... (Simulated)")
+                # Submit the form
+                # Button: <button type="button" id="Send"><span>確認送出</span></button>
+                submit_btn = self.driver.find_element(By.CSS_SELECTOR, ".submit button#Send")
+                submit_btn.click()
+                print("Form submitted!")
 
-                # Wait for completion?
-                time.sleep(2)
+                # Wait for submission to complete
+                time.sleep(3)
 
                 # 3. Cleanup
                 if xml_filepath:
