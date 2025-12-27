@@ -178,79 +178,9 @@ class HearingAssessmentApp(ctk.CTk):
         self.frame_form = ctk.CTkScrollableFrame(form_card, fg_color="transparent")
         self.frame_form.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # Otoscopy Section (Image + Settings)
-        otoscopy_frame = ctk.CTkFrame(form_card, fg_color="transparent")
-        otoscopy_frame.pack(fill="x", padx=15, pady=(0, 15))
-
-        ctk.CTkLabel(otoscopy_frame, text="🔬 耳鏡檢查設定", 
-                    font=ctk.CTkFont(size=12, weight="bold"),
-                    text_color="#17a2b8").pack(anchor="w", pady=(0, 10))
-
-        # Left Ear Settings
-        left_oto_frame = ctk.CTkFrame(otoscopy_frame, fg_color="#2b2b2b", corner_radius=8)
-        left_oto_frame.pack(fill="x", pady=(0, 8))
-        
-        left_header = ctk.CTkFrame(left_oto_frame, fg_color="#1e5631", corner_radius=0)
-        left_header.pack(fill="x")
-        ctk.CTkLabel(left_header, text="左耳 Left", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=5)
-
-        left_content = ctk.CTkFrame(left_oto_frame, fg_color="transparent")
-        left_content.pack(fill="x", padx=10, pady=10)
-
-        # Left - Ear Clean
-        left_clean_row = ctk.CTkFrame(left_content, fg_color="transparent")
-        left_clean_row.pack(fill="x", pady=2)
-        ctk.CTkLabel(left_clean_row, text="耳道乾淨：", width=80, anchor="w").pack(side="left")
-        self.left_ear_clean = ctk.StringVar(value="True")
-        ctk.CTkRadioButton(left_clean_row, text="是", variable=self.left_ear_clean, value="True").pack(side="left", padx=(0, 10))
-        ctk.CTkRadioButton(left_clean_row, text="否", variable=self.left_ear_clean, value="False").pack(side="left")
-
-        # Left - Ear Intact
-        left_intact_row = ctk.CTkFrame(left_content, fg_color="transparent")
-        left_intact_row.pack(fill="x", pady=2)
-        ctk.CTkLabel(left_intact_row, text="鼓膜完整：", width=80, anchor="w").pack(side="left")
-        self.left_ear_intact = ctk.StringVar(value="True")
-        ctk.CTkRadioButton(left_intact_row, text="是", variable=self.left_ear_intact, value="True").pack(side="left", padx=(0, 10))
-        ctk.CTkRadioButton(left_intact_row, text="否", variable=self.left_ear_intact, value="False").pack(side="left")
-
-        # Left - Image Button
-        self.btn_img_l = ctk.CTkButton(left_content, text="📷 選擇左耳圖像", height=28,
-                                       fg_color="#6c757d", hover_color="#5a6268",
-                                       command=lambda: self.select_img("Left"))
-        self.btn_img_l.pack(fill="x", pady=(8, 0))
-
-        # Right Ear Settings
-        right_oto_frame = ctk.CTkFrame(otoscopy_frame, fg_color="#2b2b2b", corner_radius=8)
-        right_oto_frame.pack(fill="x")
-        
-        right_header = ctk.CTkFrame(right_oto_frame, fg_color="#8b0000", corner_radius=0)
-        right_header.pack(fill="x")
-        ctk.CTkLabel(right_header, text="右耳 Right", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=5)
-
-        right_content = ctk.CTkFrame(right_oto_frame, fg_color="transparent")
-        right_content.pack(fill="x", padx=10, pady=10)
-
-        # Right - Ear Clean
-        right_clean_row = ctk.CTkFrame(right_content, fg_color="transparent")
-        right_clean_row.pack(fill="x", pady=2)
-        ctk.CTkLabel(right_clean_row, text="耳道乾淨：", width=80, anchor="w").pack(side="left")
-        self.right_ear_clean = ctk.StringVar(value="True")
-        ctk.CTkRadioButton(right_clean_row, text="是", variable=self.right_ear_clean, value="True").pack(side="left", padx=(0, 10))
-        ctk.CTkRadioButton(right_clean_row, text="否", variable=self.right_ear_clean, value="False").pack(side="left")
-
-        # Right - Ear Intact
-        right_intact_row = ctk.CTkFrame(right_content, fg_color="transparent")
-        right_intact_row.pack(fill="x", pady=2)
-        ctk.CTkLabel(right_intact_row, text="鼓膜完整：", width=80, anchor="w").pack(side="left")
-        self.right_ear_intact = ctk.StringVar(value="True")
-        ctk.CTkRadioButton(right_intact_row, text="是", variable=self.right_ear_intact, value="True").pack(side="left", padx=(0, 10))
-        ctk.CTkRadioButton(right_intact_row, text="否", variable=self.right_ear_intact, value="False").pack(side="left")
-
-        # Right - Image Button
-        self.btn_img_r = ctk.CTkButton(right_content, text="📷 選擇右耳圖像", height=28,
-                                       fg_color="#6c757d", hover_color="#5a6268",
-                                       command=lambda: self.select_img("Right"))
-        self.btn_img_r.pack(fill="x", pady=(8, 0))
+        # Otoscopy section will be created dynamically in populate_manual_form
+        # when XML data is loaded
+        self.otoscopy_frame = None  # Placeholder for dynamic creation
 
         # Right Column - Status Log
         log_card = ctk.CTkFrame(content_area, corner_radius=10)
@@ -339,7 +269,15 @@ class HearingAssessmentApp(ctk.CTk):
         for widget in self.frame_form.winfo_children():
             widget.destroy()
 
-        # Manual input fields
+        # Initialize StringVars for otoscopy settings
+        self.left_ear_clean = ctk.StringVar(value="True")
+        self.left_ear_intact = ctk.StringVar(value="True")
+        self.right_ear_clean = ctk.StringVar(value="True")
+        self.right_ear_intact = ctk.StringVar(value="True")
+        self.btn_img_l = None
+        self.btn_img_r = None
+
+        # Manual input fields (always show)
         fields = [
             ("檢查人員 Inspector", "InspectorName", ""),
         ]
@@ -362,17 +300,87 @@ class HearingAssessmentApp(ctk.CTk):
 
             self.manual_inputs[key] = entry
 
-        # Show XML parsed data summary
+        # Only show Otoscopy section if XML data is loaded
         if self.xml_data:
-            # Build preview text with all meaningful data
+            # ==========================================
+            # Otoscopy Section (only when XML loaded)
+            # ==========================================
+            ctk.CTkLabel(self.frame_form, text="🔬 耳鏡檢查設定", 
+                        font=ctk.CTkFont(size=12, weight="bold"),
+                        text_color="#17a2b8").pack(anchor="w", pady=(15, 10))
+
+            # --- Left Ear ---
+            left_oto_frame = ctk.CTkFrame(self.frame_form, fg_color="#2b2b2b", corner_radius=8)
+            left_oto_frame.pack(fill="x", pady=(0, 8))
+            
+            left_header = ctk.CTkFrame(left_oto_frame, fg_color="#1e5631", corner_radius=0)
+            left_header.pack(fill="x")
+            ctk.CTkLabel(left_header, text="左耳 Left", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=5)
+
+            left_content = ctk.CTkFrame(left_oto_frame, fg_color="transparent")
+            left_content.pack(fill="x", padx=10, pady=10)
+
+            # Left - Ear Clean
+            left_clean_row = ctk.CTkFrame(left_content, fg_color="transparent")
+            left_clean_row.pack(fill="x", pady=2)
+            ctk.CTkLabel(left_clean_row, text="耳道乾淨：", width=80, anchor="w").pack(side="left")
+            ctk.CTkRadioButton(left_clean_row, text="是", variable=self.left_ear_clean, value="True").pack(side="left", padx=(0, 10))
+            ctk.CTkRadioButton(left_clean_row, text="否", variable=self.left_ear_clean, value="False").pack(side="left")
+
+            # Left - Ear Intact
+            left_intact_row = ctk.CTkFrame(left_content, fg_color="transparent")
+            left_intact_row.pack(fill="x", pady=2)
+            ctk.CTkLabel(left_intact_row, text="鼓膜完整：", width=80, anchor="w").pack(side="left")
+            ctk.CTkRadioButton(left_intact_row, text="是", variable=self.left_ear_intact, value="True").pack(side="left", padx=(0, 10))
+            ctk.CTkRadioButton(left_intact_row, text="否", variable=self.left_ear_intact, value="False").pack(side="left")
+
+            # Left - Image Button
+            self.btn_img_l = ctk.CTkButton(left_content, text="📷 選擇左耳圖像", height=28,
+                                           fg_color="#6c757d", hover_color="#5a6268",
+                                           command=lambda: self.select_img("Left"))
+            self.btn_img_l.pack(fill="x", pady=(8, 0))
+
+            # --- Right Ear ---
+            right_oto_frame = ctk.CTkFrame(self.frame_form, fg_color="#2b2b2b", corner_radius=8)
+            right_oto_frame.pack(fill="x", pady=(0, 10))
+            
+            right_header = ctk.CTkFrame(right_oto_frame, fg_color="#8b0000", corner_radius=0)
+            right_header.pack(fill="x")
+            ctk.CTkLabel(right_header, text="右耳 Right", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=5)
+
+            right_content = ctk.CTkFrame(right_oto_frame, fg_color="transparent")
+            right_content.pack(fill="x", padx=10, pady=10)
+
+            # Right - Ear Clean
+            right_clean_row = ctk.CTkFrame(right_content, fg_color="transparent")
+            right_clean_row.pack(fill="x", pady=2)
+            ctk.CTkLabel(right_clean_row, text="耳道乾淨：", width=80, anchor="w").pack(side="left")
+            ctk.CTkRadioButton(right_clean_row, text="是", variable=self.right_ear_clean, value="True").pack(side="left", padx=(0, 10))
+            ctk.CTkRadioButton(right_clean_row, text="否", variable=self.right_ear_clean, value="False").pack(side="left")
+
+            # Right - Ear Intact
+            right_intact_row = ctk.CTkFrame(right_content, fg_color="transparent")
+            right_intact_row.pack(fill="x", pady=2)
+            ctk.CTkLabel(right_intact_row, text="鼓膜完整：", width=80, anchor="w").pack(side="left")
+            ctk.CTkRadioButton(right_intact_row, text="是", variable=self.right_ear_intact, value="True").pack(side="left", padx=(0, 10))
+            ctk.CTkRadioButton(right_intact_row, text="否", variable=self.right_ear_intact, value="False").pack(side="left")
+
+            # Right - Image Button
+            self.btn_img_r = ctk.CTkButton(right_content, text="📷 選擇右耳圖像", height=28,
+                                           fg_color="#6c757d", hover_color="#5a6268",
+                                           command=lambda: self.select_img("Right"))
+            self.btn_img_r.pack(fill="x", pady=(8, 0))
+
+            # ==========================================
+            # XML Parsed Data Preview
+            # ==========================================
             preview_text = ""
-            skip_keys = ["Raw_FirstName", "Raw_LastName"]  # Skip internal keys
+            skip_keys = ["Raw_FirstName", "Raw_LastName"]
             
             for key, value in self.xml_data.items():
                 if key not in skip_keys and value:
                     preview_text += f"{key}: {value}\n"
 
-            # Only show section if there's data to display
             if preview_text.strip():
                 ctk.CTkLabel(self.frame_form, text="📊 從 XML 解析的數據", 
                             font=ctk.CTkFont(size=12, weight="bold"),
@@ -441,7 +449,7 @@ class HearingAssessmentApp(ctk.CTk):
 
             try:
                 self.after(0, lambda: self.log_status("🔐 正在登入 CRM..."))
-                auto = HearingAutomation(headless=True)
+                auto = HearingAutomation(headless=False)  # DEBUG: 有頭模式，可觀察操作
 
                 self.after(0, lambda: self.log_status("🔍 正在搜尋病患..."))
                 auto.run_automation(payload, filepath, config)
