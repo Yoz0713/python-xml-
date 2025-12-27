@@ -72,26 +72,117 @@ def classify_tympanogram_type(peak_pressure: Optional[float], peak_compliance: O
     Type C:  Negative pressure - < -100 daPa or > +100 daPa
     
     Based on noah_xml_parsing_guide.md section 5.4
+    Returns only the letter/code (A, As, Ad, B, C) without "Type" prefix.
     """
     if peak_pressure is None or peak_compliance is None:
         return ""
     
     # Type B: Flat (very low compliance, no clear peak)
     if peak_compliance <= 0.1:
-        return "Type B"
+        return "B"
     
     # Type C: Abnormal pressure
     if peak_pressure < -100 or peak_pressure > 100:
-        return "Type C"
+        return "C"
     
     # Normal pressure range (-100 ~ +100 daPa), classify by compliance
     if peak_compliance < 0.3:
-        return "Type As"  # Shallow peak
+        return "As"  # Shallow peak
     elif peak_compliance > 1.6:
-        return "Type Ad"  # Deep peak
+        return "Ad"  # Deep peak
     else:
-        return "Type A"   # Normal
+        return "A"   # Normal
 
+
+def get_available_sessions(filepath: str) -> Dict[str, Any]:
+    """
+    Parse XML and return available sessions grouped by type and date.
+    Used by the wizard dialog to let user select which sessions to upload.
+    
+    Returns:
+        {
+            "patient_info": {...},
+            "pta_sessions": [{"date": "2024-12-14", "display": "2024-12-14 純音聽力", ...}, ...],
+            "tymp_sessions": [{"date": "2024-12-14", "display": "2024-12-14 左耳+右耳", "left": True, "right": True}, ...]
+        }
+    """
+    # Read and clean XML
+    with open(filepath, 'r', encoding='utf-8') as f:
+        xml_string = f.read()
+    
+    cleaned_xml = clean_xml(xml_string)
+    root = ET.fromstring(cleaned_xml)
+    
+    # Extract patient info
+    raw_first_name = get_text(root, 'FirstName') or ""
+    raw_last_name = get_text(root, 'LastName') or ""
+    patient_name = smart_clean_name(raw_first_name, raw_last_name)
+    birth_date = get_text(root, 'PatientBirthDate') or get_text(root, 'BirthDate') or ""
+    if birth_date and 'T' in birth_date:
+        birth_date = birth_date.split('T')[0]
+    
+    patient_info = {
+        "Target_Patient_Name": patient_name,
+        "Patient_BirthDate": birth_date,
+    }
+    
+    # Collect session info
+    pta_dates = set()
+    tymp_by_date: Dict[str, Dict[str, bool]] = {}  # date -> {"left": True/False, "right": True/False}
+    
+    for action in root.findall('.//Action'):
+        action_date_elem = action.find('ActionDate')
+        if action_date_elem is None or not action_date_elem.text:
+            continue
+        
+        full_date_str = action_date_elem.text
+        date_key = full_date_str.split('T')[0]  # YYYY-MM-DD
+        
+        type_of_data = get_text(action, 'TypeOfData') or ""
+        description = get_text(action, 'Description') or ""
+        
+        if 'audiogram' in type_of_data.lower():
+            pta_dates.add(date_key)
+        
+        elif 'impedance' in type_of_data.lower():
+            if date_key not in tymp_by_date:
+                tymp_by_date[date_key] = {"left": False, "right": False}
+            
+            if 'left' in description.lower():
+                tymp_by_date[date_key]["left"] = True
+            elif 'right' in description.lower():
+                tymp_by_date[date_key]["right"] = True
+    
+    # Build session lists
+    pta_sessions = []
+    for date in sorted(pta_dates, reverse=True):
+        pta_sessions.append({
+            "date": date,
+            "display": f"{date} 純音聽力"
+        })
+    
+    tymp_sessions = []
+    for date in sorted(tymp_by_date.keys(), reverse=True):
+        info = tymp_by_date[date]
+        ears = []
+        if info["left"]:
+            ears.append("左耳")
+        if info["right"]:
+            ears.append("右耳")
+        
+        if ears:
+            tymp_sessions.append({
+                "date": date,
+                "display": f"{date} {'+'.join(ears)}",
+                "left": info["left"],
+                "right": info["right"]
+            })
+    
+    return {
+        "patient_info": patient_info,
+        "pta_sessions": pta_sessions,
+        "tymp_sessions": tymp_sessions
+    }
 
 def parse_noah_xml(filepath: str) -> List[Dict[str, Any]]:
     """
@@ -219,10 +310,15 @@ def parse_noah_xml(filepath: str) -> List[Dict[str, Any]]:
                 for pt_node in ucl_block.findall('.//TonePoints'):
                     freq = get_float(pt_node, 'StimulusFrequency')
                     level = get_float(pt_node, 'StimulusLevel')
+                    status = get_text(pt_node, 'TonePointStatus') or ""
                     
                     if freq is not None and level is not None:
                         key = f"PTA_{side}_UCL_{int(freq)}"
-                        current_session[key] = str(int(level))
+                        # Add NR suffix if TonePointStatus is NoResponse
+                        if status.lower() == 'noresponse':
+                            current_session[key] = f"{int(level)}NR"
+                        else:
+                            current_session[key] = str(int(level))
             
             # --- SRT (Speech Reception Threshold) ---
             for srt_block in action.findall('.//SpeechReceptionThresholdAudiogram'):
