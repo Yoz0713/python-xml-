@@ -141,14 +141,19 @@ class HearingAutomation:
     
     def _handle_store_popup(self, store_id=""):
         """Handle the store switch popup - either switch store or dismiss it."""
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        
         try:
-            time.sleep(1)  # Wait for popup to appear
+            time.sleep(2)  # Wait for popup to appear (increased from 1s)
             
             # Check if popup exists
             popup = self.driver.find_elements(By.ID, "store-switch")
             if not popup or not popup[0].is_displayed():
                 print("No store switch popup found")
                 return
+            
+            print(f"Store popup found. store_id to switch: '{store_id}'")
             
             # If store_id is provided, switch to that store
             if store_id:
@@ -160,17 +165,28 @@ class HearingAutomation:
                 # Click the switch button
                 switch_btn = self.driver.find_element(By.ID, "SwitchActiveStore")
                 switch_btn.click()
-                print("Clicked switch store button")
-                time.sleep(2)
+                print("Clicked switch store button - waiting for page reload...")
+                
+                # Wait for page to reload after store switch (wait for popup to disappear)
+                time.sleep(5)  # Give page time to reload
+                
+                # Wait until popup is gone or page is reloaded
+                try:
+                    wait = WebDriverWait(self.driver, 10)
+                    wait.until(EC.invisibility_of_element_located((By.ID, "store-switch")))
+                    print("Store switch complete - popup closed")
+                except:
+                    print("Store switch - popup may still be visible, continuing anyway")
+                
             else:
                 # Just close the popup without switching
                 close_link = self.driver.find_element(By.CSS_SELECTOR, "#store-switch span.close a")
                 close_link.click()
                 print("Closed store switch popup (no switch)")
-                time.sleep(0.5)
+                time.sleep(1)
             
         except Exception as e:
-            print(f"Popup handling: {e}")
+            print(f"Popup handling error: {e}")
 
     def search_patient(self, patient_name, birth_date, timeout=30):
         """
@@ -337,6 +353,12 @@ class HearingAutomation:
 
     def fill_form(self, data):
         """Iterates through FIELD_MAP and fills the form."""
+        # Debug: Print key fields
+        print(f"=== Fill Form Debug ===")
+        print(f"InspectorName: '{data.get('InspectorName', 'NOT FOUND')}'")
+        print(f"TestDateY: '{data.get('TestDateY', 'NOT FOUND')}'")
+        print(f"========================")
+        
         for field in FIELD_MAP:
             try:
                 # Determine value to input
