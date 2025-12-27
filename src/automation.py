@@ -50,8 +50,9 @@ class HearingAutomation:
             url = user_config.get("url")
             username = user_config.get("username")
             password = user_config.get("password")
+            store_id = user_config.get("store_id", "")
 
-            if self.navigate_and_login(url, username, password):
+            if self.navigate_and_login(url, username, password, store_id=store_id):
                 # Search Patient using name and DOB from XML
                 patient_name = data_payload.get("Target_Patient_Name", "")
                 birth_date = data_payload.get("Patient_BirthDate", "")
@@ -89,7 +90,7 @@ class HearingAutomation:
         finally:
             self.driver.quit()
 
-    def navigate_and_login(self, url, username, password, timeout=60):
+    def navigate_and_login(self, url, username, password, timeout=60, store_id=""):
         """Navigate to CRM and perform login with provided credentials."""
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
@@ -126,11 +127,48 @@ class HearingAutomation:
             except NoSuchElementException:
                 # Login form gone = success
                 print("Login successful")
-                return True
                 
+                # Handle store switch popup (切換店別) if it appears
+                self._handle_store_popup(store_id)
+                
+                return True
+            
         except Exception as e:
             print(f"Login error: {e}")
             return False
+    
+    def _handle_store_popup(self, store_id=""):
+        """Handle the store switch popup - either switch store or dismiss it."""
+        try:
+            time.sleep(1)  # Wait for popup to appear
+            
+            # Check if popup exists
+            popup = self.driver.find_elements(By.ID, "store-switch")
+            if not popup or not popup[0].is_displayed():
+                print("No store switch popup found")
+                return
+            
+            # If store_id is provided, switch to that store
+            if store_id:
+                # Select the store from dropdown
+                store_select = Select(self.driver.find_element(By.NAME, "StoreSId"))
+                store_select.select_by_value(store_id)
+                print(f"Selected store: {store_id}")
+                
+                # Click the switch button
+                switch_btn = self.driver.find_element(By.ID, "SwitchActiveStore")
+                switch_btn.click()
+                print("Clicked switch store button")
+                time.sleep(2)
+            else:
+                # Just close the popup without switching
+                close_link = self.driver.find_element(By.CSS_SELECTOR, "#store-switch span.close a")
+                close_link.click()
+                print("Closed store switch popup (no switch)")
+                time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Popup handling: {e}")
 
     def search_patient(self, patient_name, birth_date, timeout=30):
         """

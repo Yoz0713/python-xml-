@@ -18,7 +18,7 @@ class HearingAssessmentApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("🎧 聽力評估自動化工具")
+        self.title("🌳 大樹聽中行政自動化")
         self.geometry("1000x800")
         self.minsize(900, 700)
 
@@ -103,10 +103,35 @@ class HearingAssessmentApp(ctk.CTk):
 
         # Password
         pass_frame = ctk.CTkFrame(crm_card, fg_color="transparent")
-        pass_frame.pack(fill="x", padx=20, pady=(5, 15))
+        pass_frame.pack(fill="x", padx=20, pady=(5, 5))
         ctk.CTkLabel(pass_frame, text="密碼", width=100, anchor="w").pack(side="left")
         self.entry_password = ctk.CTkEntry(pass_frame, placeholder_text="請輸入您的密碼", show="●")
         self.entry_password.pack(side="left", fill="x", expand=True, padx=(10, 0))
+
+        # Store Selection
+        store_frame = ctk.CTkFrame(crm_card, fg_color="transparent")
+        store_frame.pack(fill="x", padx=20, pady=(5, 15))
+        ctk.CTkLabel(store_frame, text="操作店別", width=100, anchor="w").pack(side="left")
+        
+        # Store options from the CRM
+        self.store_options = {
+            "不切換 (使用預設)": "",
+            "桃園藝文店": "0O146270501766340937",
+            "龜山萬壽店": "0O303359038470254289",
+            "內壢忠孝二店": "0O309358019937740140",
+            "中壢環東店": "0O311663907407279810",
+            "彰化員林大同店": "0P345691397366329983",
+            "湖口成長店": "0O312542441306802027",
+            "北屯崇德店": "0O312543766542134683",
+            "西屯福科店": "0P343591528669372377",
+            "竹北中興店": "0P343592174119614845",
+            "羅東倉前店": "0P345513608514105513",
+        }
+        
+        self.store_var = ctk.StringVar(value="不切換 (使用預設)")
+        self.store_dropdown = ctk.CTkOptionMenu(store_frame, values=list(self.store_options.keys()),
+                                                 variable=self.store_var, width=200)
+        self.store_dropdown.pack(side="left", padx=(10, 0))
 
         # Save hint
         ctk.CTkLabel(crm_card, text="💡 設定會在啟動自動化時使用", 
@@ -444,7 +469,8 @@ class HearingAssessmentApp(ctk.CTk):
             config = {
                 "url": self.entry_url.get(),
                 "username": self.entry_username.get(),
-                "password": self.entry_password.get()
+                "password": self.entry_password.get(),
+                "store_id": self.store_options.get(self.store_var.get(), "")
             }
 
             try:
