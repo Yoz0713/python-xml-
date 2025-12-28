@@ -47,6 +47,16 @@ jobs:
       run: |
         flet pack main.py --name HearingAutomation --add-data "src;src"
 
+    - name: Download and install UPX
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/upx/upx/releases/download/v4.2.2/upx-4.2.2-win64.zip" -OutFile "upx.zip"
+        Expand-Archive -Path "upx.zip" -DestinationPath "upx"
+        
+    - name: Compress with UPX
+      run: |
+        ./upx/upx-4.2.2-win64/upx.exe --best --lzma dist/HearingAutomation.exe
+      continue-on-error: true
+
     - name: List dist folder
       run: |
         dir dist

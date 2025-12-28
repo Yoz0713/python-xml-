@@ -125,7 +125,7 @@ class HearingApp:
         self.folder_path_text = ft.Text("選擇監控資料夾...", size=13, color=ft.Colors.GREY)
         
         self.monitor_btn = ft.ElevatedButton(
-            text="▶️ 開始監控",
+            "▶️ 開始監控",
             on_click=self.toggle_monitoring,
             style=ft.ButtonStyle(
                 color=ft.Colors.WHITE,
@@ -138,7 +138,7 @@ class HearingApp:
         self.patient_info = ft.Text("", size=13, color=ft.Colors.GREY)
         
         self.process_btn = ft.ElevatedButton(
-            text="⚙️ 設定並上傳",
+            "⚙️ 設定並上傳",
             on_click=self.open_wizard,
             disabled=True,
             style=ft.ButtonStyle(
@@ -318,7 +318,7 @@ class HearingApp:
     def start_monitoring(self):
         """Start file monitoring."""
         self.monitoring = True
-        self.monitor_btn.text = "⏹️ 停止監控"
+        self.monitor_btn.content = "⏹️ 停止監控"
         self.monitor_btn.style.bgcolor = ft.Colors.RED
         self.status_chip.label.value = "監控中..."
         self.status_chip.leading.name = ft.Icons.RADIO_BUTTON_CHECKED
@@ -335,7 +335,7 @@ class HearingApp:
     def stop_monitoring(self):
         """Stop file monitoring."""
         self.monitoring = False
-        self.monitor_btn.text = "▶️ 開始監控"
+        self.monitor_btn.content = "▶️ 開始監控"
         self.monitor_btn.style.bgcolor = ft.Colors.BLUE
         self.status_chip.label.value = "已停止"
         self.status_chip.leading.name = ft.Icons.STOP_CIRCLE
