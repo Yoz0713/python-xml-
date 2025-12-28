@@ -3,6 +3,8 @@ name: Build Windows Exe
 on:
   push:
     branches: [ "main", "master", "feature/*" ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
@@ -26,19 +28,33 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Get customtkinter path
-      id: ctk_path
+    - name: Install Playwright browsers
+      run: |
+        playwright install chromium
+
+    - name: Get Flet path
+      id: flet_path
       shell: bash
       run: |
-        CTK_PATH=$(python -c "import customtkinter; print(customtkinter.__path__[0])")
-        echo "path=$CTK_PATH" >> $GITHUB_OUTPUT
+        FLET_PATH=$(python -c "import flet; import os; print(os.path.dirname(flet.__file__))")
+        echo "path=$FLET_PATH" >> $GITHUB_OUTPUT
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller --noconsole --onefile --name HearingAssessmentTool-DualMode --paths . --add-data "${{ steps.ctk_path.outputs.path }};customtkinter/" src/main.py
+        pyinstaller --noconsole --onefile --name HearingAutomation --paths . --add-data "src;src" --add-data "${{ steps.flet_path.outputs.path }};flet/" --hidden-import=flet --hidden-import=playwright main.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: HearingAssessmentTool-DualMode-Exe
-        path: dist/HearingAssessmentTool-DualMode.exe
+        name: HearingAutomation-Windows
+        path: dist/HearingAutomation.exe
+        retention-days: 30
+
+    - name: Create Release (on tag)
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/HearingAutomation.exe
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
