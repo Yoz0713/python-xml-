@@ -63,6 +63,10 @@ class HearingApp:
             "羅東倉前店": "0P345513608514105513",
         }
         
+        # FilePicker
+        self.file_picker = ft.FilePicker(on_result=self.on_dialog_result)
+        self.page.overlay.append(self.file_picker)
+        
         self.build_ui()
     
     def setup_page(self):
@@ -110,7 +114,7 @@ class HearingApp:
                             self.status_chip,
                         ]),
                         padding=ft.padding.symmetric(horizontal=20, vertical=10),
-                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        bgcolor=ft.Colors.GREY_900,
                     ),
                     # Tabs
                     self.tabs,
@@ -195,7 +199,7 @@ class HearingApp:
                             ft.Text("📊 XML 資料預覽", weight=ft.FontWeight.BOLD),
                             ft.Container(
                                 content=self.xml_preview,
-                                bgcolor=ft.Colors.SURFACE_CONTAINER,
+                                bgcolor=ft.Colors.GREY_800,
                                 border_radius=10,
                                 padding=15,
                                 expand=True,
@@ -210,7 +214,7 @@ class HearingApp:
                             ft.Text("📋 執行狀態", weight=ft.FontWeight.BOLD),
                             ft.Container(
                                 content=self.log_list,
-                                bgcolor=ft.Colors.SURFACE_CONTAINER,
+                                bgcolor=ft.Colors.GREY_800,
                                 border_radius=10,
                                 padding=15,
                                 expand=True,
@@ -297,12 +301,16 @@ class HearingApp:
     
     async def pick_folder(self, e):
         """Open folder picker dialog."""
-        result = await self.page.get_directory_path_async(dialog_title="選擇監控資料夾")
-        if result:
-            self.watch_path = result
-            self.folder_path_text.value = result
+        # Use FilePicker instead of page.get_directory_path_async
+        self.file_picker.get_directory_path(dialog_title="選擇監控資料夾")
+            
+    def on_dialog_result(self, e: ft.FilePickerResultEvent):
+        """Handle file picker result."""
+        if e.path:
+            self.watch_path = e.path
+            self.folder_path_text.value = e.path
             self.page.update()
-            self.log(f"📁 選擇資料夾: {result}")
+            self.log(f"📁 選擇資料夾: {e.path}")
     
     def toggle_monitoring(self, e):
         """Toggle file monitoring."""
