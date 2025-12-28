@@ -1,12 +1,13 @@
 # Core Framework
-flet>=0.21.0
+# Lock Flet to 0.25.x to avoid breaking changes in 1.0 Beta
+flet==0.25.2
 playwright>=1.40.0
 
 # File Monitoring
-watchdog>=6.0.0
+watchdog>=4.0.0
 
 # XML Parsing (built-in, no extra dependency needed)
 # xml.etree.ElementTree is part of Python standard library
 
 # Utilities
-typing_extensions>=4.15.0
+typing_extensions>=4.0.0

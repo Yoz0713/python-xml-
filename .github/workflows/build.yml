@@ -25,7 +25,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flet
+        pip install flet==0.25.2
         pip install playwright
         pip install watchdog
         pip install typing_extensions
