@@ -91,9 +91,9 @@ class HearingApp:
             selected_index=0,
             animation_duration=300,
             tabs=[
-                ft.Tab(text="📡 即時監控", content=self.build_monitor_tab()),
-                ft.Tab(text="📁 批次上傳", content=self.build_batch_tab()),
-                ft.Tab(text="⚙️ 設定", content=self.build_settings_tab()),
+                ft.Tab(label="📡 即時監控", content=self.build_monitor_tab()),
+                ft.Tab(label="📁 批次上傳", content=self.build_batch_tab()),
+                ft.Tab(label="⚙️ 設定", content=self.build_settings_tab()),
             ],
             expand=True,
         )
