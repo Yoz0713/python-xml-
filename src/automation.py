@@ -145,11 +145,11 @@ class HearingAutomation:
         from selenium.webdriver.support import expected_conditions as EC
         
         try:
-            time.sleep(2)  # Wait for popup to appear (increased from 1s)
-            
-            # Check if popup exists
-            popup = self.driver.find_elements(By.ID, "store-switch")
-            if not popup or not popup[0].is_displayed():
+            # Quick check for popup (use short wait instead of sleep)
+            try:
+                wait = WebDriverWait(self.driver, 2)
+                popup = wait.until(EC.visibility_of_element_located((By.ID, "store-switch")))
+            except:
                 print("No store switch popup found")
                 return
             
@@ -165,25 +165,22 @@ class HearingAutomation:
                 # Click the switch button
                 switch_btn = self.driver.find_element(By.ID, "SwitchActiveStore")
                 switch_btn.click()
-                print("Clicked switch store button - waiting for page reload...")
+                print("Clicked switch store button")
                 
-                # Wait for page to reload after store switch (wait for popup to disappear)
-                time.sleep(5)  # Give page time to reload
-                
-                # Wait until popup is gone or page is reloaded
+                # Wait for popup to close (max 5s)
                 try:
-                    wait = WebDriverWait(self.driver, 10)
+                    wait = WebDriverWait(self.driver, 5)
                     wait.until(EC.invisibility_of_element_located((By.ID, "store-switch")))
-                    print("Store switch complete - popup closed")
+                    print("Store switch complete")
                 except:
-                    print("Store switch - popup may still be visible, continuing anyway")
+                    time.sleep(1)  # Short fallback wait
                 
             else:
                 # Just close the popup without switching
                 close_link = self.driver.find_element(By.CSS_SELECTOR, "#store-switch span.close a")
                 close_link.click()
                 print("Closed store switch popup (no switch)")
-                time.sleep(1)
+                time.sleep(0.5)
             
         except Exception as e:
             print(f"Popup handling error: {e}")

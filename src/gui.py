@@ -737,6 +737,12 @@ class HearingAssessmentApp(ctk.CTk):
                 "password": self.entry_password.get(),
                 "store_id": self.store_options.get(self.store_var.get(), "")
             }
+            
+            # Debug: show selected store
+            store_name = self.store_var.get()
+            store_id = config["store_id"]
+            self.after(0, lambda: self.log_status(f"🏪 選擇店別: {store_name}"))
+            self.after(0, lambda: self.log_status(f"🔑 店別ID: {store_id if store_id else '(不切換)'}"))
 
             try:
                 self.after(0, lambda: self.log_status("🔐 正在登入 CRM..."))
