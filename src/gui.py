@@ -20,10 +20,37 @@ class XMLFileHandler(FileSystemEventHandler):
     
     def __init__(self, callback):
         self.callback = callback
+        self.last_path = None
+        self.last_time = 0
     
+    def _process_event(self, event):
+        if event.is_directory:
+            return
+        
+        filename = event.src_path
+        if not filename.lower().endswith('.xml'):
+            return
+            
+        import time
+        current_time = time.time()
+        
+        # Simple debounce (avoid duplicate events within 1 second)
+        if filename == self.last_path and (current_time - self.last_time) < 1.0:
+            return
+            
+        self.last_path = filename
+        self.last_time = current_time
+        self.callback(filename)
+
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith('.xml'):
-            self.callback(event.src_path)
+        self._process_event(event)
+        
+    def on_modified(self, event):
+        self._process_event(event)
+        
+    def on_moved(self, event):
+        if not event.is_directory and event.dest_path.lower().endswith('.xml'):
+            self.callback(event.dest_path)
 
 
 class HearingApp:
@@ -338,6 +365,22 @@ class HearingApp:
         self.observer.start()
         
         self.log(f"🟢 開始監控: {self.watch_path}")
+        
+        # Initial scan for existing files
+        try:
+            xml_files = [
+                os.path.join(self.watch_path, f) 
+                for f in os.listdir(self.watch_path) 
+                if f.lower().endswith('.xml')
+            ]
+            if xml_files:
+                # Load the most recent file
+                latest_file = max(xml_files, key=os.path.getmtime)
+                self.log(f"🔎 發現既有檔案: {os.path.basename(latest_file)}")
+                self.on_new_file(latest_file)
+        except Exception as e:
+            self.log(f"⚠️ 初始掃描失敗: {e}")
+            
         self.page.update()
     
     def stop_monitoring(self):

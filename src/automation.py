@@ -90,6 +90,14 @@ class HearingAutomation:
         except Exception as e:
             print(f"❌ Automation error: {e}")
             self._move_file_to_failed(xml_filepath)
+            
+            # If running with GUI visible, wait a bit so user can see the error
+            if not self.headless:
+                print("⚠️ Error occurred with GUI visible. Pausing for 20 seconds before closing...")
+                try:
+                    await self.page.wait_for_timeout(20000)
+                except:
+                    pass
             raise
     
     async def navigate_and_login(self, url: str, username: str, password: str, store_id: str = "") -> bool:
