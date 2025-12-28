@@ -1,15 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
-import sys
 
 block_cipher = None
-
-# Get Flet path dynamically
-try:
-    import flet
-    flet_path = os.path.dirname(flet.__file__)
-except:
-    flet_path = ''
 
 a = Analysis(
     ['main.py'],
@@ -20,29 +11,31 @@ a = Analysis(
     ],
     hiddenimports=[
         'flet',
-        'flet_core',
-        'flet_runtime',
+        'flet.fastapi',
+        'flet.canvas',
+        'flet.matplotlib_chart',
+        'flet.plotly_chart', 
+        'flet.map',
         'playwright',
         'playwright.sync_api',
         'playwright.async_api',
         'watchdog',
         'watchdog.observers',
         'watchdog.events',
+        'asyncio',
+        'typing_extensions',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'flet.auth',  # Exclude problematic auth module
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
-
-# Add flet data if found
-if flet_path and os.path.exists(flet_path):
-    a.datas += [(os.path.join('flet', f), os.path.join(flet_path, f), 'DATA') 
-                for f in os.listdir(flet_path) if not f.startswith('__')]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
