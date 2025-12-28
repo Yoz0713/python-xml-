@@ -29,7 +29,16 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'flet.auth',  # Exclude problematic auth module
+        'flet.auth',
+        'tkinter',
+        'unittest',
+        'email',
+        'http',
+        'xml.dom',
+        'pydoc',
+        'pdb',
+        'difflib',
+        'inspect',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
