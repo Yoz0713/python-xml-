@@ -217,7 +217,19 @@ def parse_noah_xml(filepath: str) -> List[Dict[str, Any]]:
     if patient_elem is not None:
         fn = patient_elem.find('FirstName')
         ln = patient_elem.find('LastName')
+        # Try multiple variations for BirthDate
         dob = patient_elem.find('DateofBirth')
+        if dob is None:
+            dob = patient_elem.find('DateOfBirth')
+        if dob is None:
+            dob = patient_elem.find('BirthDate')
+        
+        # DEBUG: Print all children of patient element to see available tags
+        print(f"[DEBUG] Patient element children: {[child.tag for child in patient_elem]}")
+        if dob is not None:
+             print(f"[DEBUG] Found DOB tag: {dob.tag}, text: {dob.text}")
+        else:
+             print("[DEBUG] DOB tag NOT FOUND")
         
         raw_first_name = fn.text if fn is not None and fn.text else ""
         raw_last_name = ln.text if ln is not None and ln.text else ""

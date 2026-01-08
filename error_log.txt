@@ -1,5 +1,0 @@
-Application startup error:
-Traceback (most recent call last):
-  File "C:\Users\bt-user\Desktop\python-xml\python-xml-\main.py", line 12, in main_entry
-    import flet as ft
-ModuleNotFoundError: No module named 'flet'
