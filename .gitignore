@@ -3,3 +3,12 @@ __pycache__/
 src/credentials.json
 credentials.json
 *.log
+
+# Build Artifacts
+build/
+dist/
+*.spec
+*.exe
+
+# Browser Binaries
+browsers/

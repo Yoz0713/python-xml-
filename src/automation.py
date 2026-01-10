@@ -25,6 +25,19 @@ class HearingAutomation:
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
         self._playwright = None
+        
+        # [Fix for PyInstaller]
+        # Allow looking for browsers in "browsers" folder next to EXE, 
+        # or fallback to system default (avoiding _MEI temp dir issue)
+        import sys
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+            local_browsers = os.path.join(base_dir, "browsers")
+            if os.path.exists(local_browsers):
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = local_browsers
+            else:
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
     
     def _log(self, message: str):
         """Print timestamped log message and call progress callback."""

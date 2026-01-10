@@ -1,8 +1,21 @@
 # ==========================================
 # USER CONFIGURATION SECTION
 # ==========================================
+import sys
+import os
+
+def get_base_path():
+    """Get the base path for resources."""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe - use executable location
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as script - use project root (parent of src)
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+BASE_PATH = get_base_path()
 CRM_URL = "https://crm.greattree.com.tw/..."  # Placeholder
-GOOGLE_JSON_PATH = "service_account.json"
+GOOGLE_JSON_PATH = os.path.join(BASE_PATH, "service_account.json")
 GOOGLE_SHEET_NAME = "Hearing_Assessment_Log"
 
 # Folders for file management
