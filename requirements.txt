@@ -11,3 +11,7 @@ watchdog>=4.0.0
 
 # Utilities
 typing_extensions>=4.0.0
+
+# Google Sheets Integration
+gspread>=6.0.0
+google-auth>=2.0.0

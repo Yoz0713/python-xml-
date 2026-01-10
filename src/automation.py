@@ -18,17 +18,23 @@ from datetime import datetime
 class HearingAutomation:
     """Hearing assessment CRM automation using Playwright."""
     
-    def __init__(self, headless: bool = True):
+    def __init__(self, headless: bool = True, progress_callback=None):
         self.headless = headless
+        self.progress_callback = progress_callback
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
         self._playwright = None
     
     def _log(self, message: str):
-        """Print timestamped log message."""
+        """Print timestamped log message and call progress callback."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] [Auto] {message}")
+        if self.progress_callback:
+            try:
+                self.progress_callback(message)
+            except Exception:
+                pass
 
     async def _save_screenshot(self, name_prefix: str):
         """Save debug screenshot."""
@@ -99,25 +105,29 @@ class HearingAutomation:
             store_id = user_config.get("store_id", "")
             
             # 1. Login
+            self._log("🔐 正在登入 CRM...")
             if await self.navigate_and_login(url, username, password, store_id):
                 # 2. Search patient
                 patient_name = data_payload.get("Target_Patient_Name", "")
                 birth_date = data_payload.get("Patient_BirthDate", "")
                 
                 if patient_name:
+                    self._log(f"🔎 正在搜尋病患: {patient_name}...")
                     if not await self.search_patient(patient_name, birth_date):
                         raise Exception(f"無法找到病患: {patient_name}")
                 
                 # 3. Fill form
+                self._log("📝 正在填寫聽力報告...")
                 await self.fill_form(data_payload)
                 
                 # 4. Submit
+                self._log("🚀 正在提交表單...")
                 await self.submit_form()
                 
-                # 5. Cleanup - move file to processed folder
+                # 5. Cleanup
                 self._move_file_to_processed(xml_filepath)
                 
-                self._log("✅ Automation complete!")
+                self._log("✅ 自動化作業完成!")
             else:
                 raise Exception("登入失敗")
                 
@@ -531,11 +541,24 @@ class HearingAutomation:
         """Submit the form."""
         try:
             submit_btn = self.page.locator('.submit button#Send, button#Send')
+            # Wait for button to be clickable
+            await submit_btn.wait_for(state='visible', timeout=5000)
             await submit_btn.click()
             print("[Submit] Form submitted!")
             
-            # Wait for submission to complete
-            await self.page.wait_for_timeout(3000)
+            # Dynamic wait: wait for verify_res element OR alert OR navigation
+            # Usually after submit, we might see a success message or be redirected
+            try:
+                # Optimized waiting: Wait for potential navigation or network idle
+                # We removed the fixed 3000ms sleep
+                await self.page.wait_for_load_state('networkidle', timeout=5000)
+                
+                # Optional: Check for specific success indicator if known
+                # e.g., await self.page.wait_for_selector('.success-message', timeout=3000)
+                
+            except Exception as e:
+                print(f"[Submit] Wait post-submit warning (non-fatal): {e}")
+                
         except Exception as e:
             print(f"[Submit] Error: {e}")
             raise
@@ -588,10 +611,10 @@ class HearingAutomation:
 
 
 # Synchronous wrapper for backward compatibility
-def run_automation_sync(data_payload: Dict[str, Any], xml_filepath: str, user_config: Dict[str, str], headless: bool = True):
+def run_automation_sync(data_payload: Dict[str, Any], xml_filepath: str, user_config: Dict[str, str], headless: bool = True, progress_callback=None):
     """Synchronous wrapper to run automation."""
     async def _run():
-        async with HearingAutomation(headless=headless) as auto:
+        async with HearingAutomation(headless=headless, progress_callback=progress_callback) as auto:
             await auto.run_automation(data_payload, xml_filepath, user_config)
     
     asyncio.run(_run())

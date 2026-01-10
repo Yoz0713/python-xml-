@@ -15,6 +15,16 @@ from watchdog.events import FileSystemEventHandler
 from src.parser import parse_noah_xml, get_available_sessions
 from src.automation import HearingAutomation, run_automation_sync
 from src.config import FIELD_MAP
+from src.sheets_writer import (
+    is_sheets_available, 
+    get_service_account_email, 
+    extract_spreadsheet_id,
+    list_worksheets,
+    append_row_to_sheet,
+    build_row_data,
+    calculate_pta,
+    get_spreadsheet_name,  # Import new function
+)
 
 # Config file path in user's AppData
 CONFIG_DIR = os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'HearingAutomation')
@@ -155,6 +165,12 @@ class HearingApp:
         self.watch_path = loaded_config.get("last_folder", "")
         self.accounts = {} # Legacy support container, unused now
         
+        # Load Google Sheets config from global config
+        self.config["spreadsheet_url"] = loaded_config.get("spreadsheet_url", "")
+        self.config["spreadsheet_id"] = loaded_config.get("spreadsheet_id", "")
+        self.config["sheet_name"] = loaded_config.get("sheet_name", "")
+        self.config["spreadsheet_title"] = loaded_config.get("spreadsheet_title", "") # New: Spreadsheet title
+        
         # Store options
         self.store_options = {
             "不切換 (使用預設)": "",
@@ -174,6 +190,19 @@ class HearingApp:
         self.file_picker = ft.FilePicker(on_result=self.on_dialog_result)
         self.page.overlay.append(self.file_picker)
         
+        # Initialize header sheets status container
+        self.header_sheets_status = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.WARNING, size=16, color=ft.Colors.ORANGE),
+                ft.Text("試算表未連線", size=12, color=ft.Colors.ORANGE),
+            ], spacing=5, alignment=ft.MainAxisAlignment.CENTER),
+            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+            border_radius=12,
+            bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.ORANGE),
+            tooltip="Google Sheets 尚未綁定或 credentials.json 遺失",
+            visible=True,
+        )
+        
         self.build_ui()
     
     def setup_page(self):
@@ -190,11 +219,55 @@ class HearingApp:
     
     def build_ui(self):
         """Build the main UI."""
-        # Status bar
-        self.status_chip = ft.Chip(
-            label=ft.Text("未啟動"),
-            leading=ft.Icon(ft.Icons.STOP_CIRCLE, color=ft.Colors.GREY),
-            bgcolor=ft.Colors.GREY_900,
+        # === Status Indicator (with animation support) ===
+        self.status_icon = ft.Icon(ft.Icons.STOP_CIRCLE, color=ft.Colors.GREY, size=20)
+        self.status_text = ft.Text("未啟動", size=14, color=ft.Colors.GREY)
+        self.status_container = ft.Container(
+            content=ft.Row([self.status_icon, self.status_text], spacing=8),
+            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            border_radius=20,
+            bgcolor=ft.Colors.GREY_800,
+        )
+        
+        # === Google Sheets Status Badge ===
+        # This will be updated by _update_sheets_badge
+        
+        # === Header Bar Dropdowns ===
+        # Account selector in header
+        self.header_account_text = ft.Text(
+            f"👤 {self.active_profile_name or '未選擇'}", 
+            size=13, 
+            color=ft.Colors.WHITE
+        )
+        self.header_account_btn = ft.Container(
+            content=ft.Row([
+                self.header_account_text,
+                ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=16, color=ft.Colors.WHITE),
+            ], spacing=2),
+            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+            border_radius=6,
+            bgcolor=ft.Colors.GREY_700,
+            on_click=self._show_account_menu,
+            ink=True,
+        )
+        
+        # Store selector in header
+        store_display = self.config.get("store_id") or "不切換"
+        self.header_store_text = ft.Text(
+            f"🏪 {store_display}", 
+            size=13, 
+            color=ft.Colors.WHITE
+        )
+        self.header_store_btn = ft.Container(
+            content=ft.Row([
+                self.header_store_text,
+                ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=16, color=ft.Colors.WHITE),
+            ], spacing=2),
+            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+            border_radius=6,
+            bgcolor=ft.Colors.GREY_700,
+            on_click=self._show_store_menu,
+            ink=True,
         )
         
         # Create tabs
@@ -208,45 +281,49 @@ class HearingApp:
             expand=True,
         )
         
-        # User info display (account + store)
-        self.user_info_account = ft.Text("帳號: 10158", size=12, color=ft.Colors.GREY_400)
-        self.user_info_store = ft.Text("店別: 不切換 (使用預設)", size=12, color=ft.Colors.GREY_400)
-        
         # Main layout
         self.page.add(
             ft.Container(
                 content=ft.Column([
-                    # Top bar
+                    # Top bar with status
                     ft.Container(
                         content=ft.Row([
-                            ft.Text("🏥 大樹聽中行政自動化", size=20, weight=ft.FontWeight.BOLD),
+                            ft.Row([
+                                ft.Icon(ft.Icons.HEARING, size=28, color=ft.Colors.BLUE),
+                                ft.Text("大樹聽中行政自動化", size=20, weight=ft.FontWeight.BOLD),
+                            ], spacing=10),
                             ft.Container(expand=True),
-                            self.status_chip,
+                            self.status_container,
                         ]),
-                        padding=ft.padding.symmetric(horizontal=20, vertical=10),
+                        padding=ft.padding.symmetric(horizontal=20, vertical=12),
                         bgcolor=ft.Colors.GREY_900,
                     ),
-                    # User info bar (under title, before tabs)
+                    # User info bar with dropdown selectors
                     ft.Container(
                         content=ft.Row([
-                            ft.Icon(ft.Icons.PERSON, size=14, color=ft.Colors.GREY_500),
-                            self.user_info_account,
-                            ft.Container(width=20),
-                            ft.Icon(ft.Icons.STORE, size=14, color=ft.Colors.GREY_500),
-                            self.user_info_store,
+                            self.header_account_btn,
+                            ft.Container(width=12),
+                            self.header_store_btn,
+                            ft.Container(expand=True),
+                            self.header_sheets_status, # Use the new header sheets status
                         ], spacing=5),
-                        padding=ft.padding.symmetric(horizontal=20, vertical=5),
+                        padding=ft.padding.symmetric(horizontal=20, vertical=8),
                         bgcolor=ft.Colors.GREY_800,
+                        border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.GREY_700)),
                     ),
                     # Tabs
                     self.tabs,
-                ]),
+                ], spacing=0),
                 expand=True,
             )
         )
         
         # Sync header with loaded config
-        self._update_user_info_bar()
+        self._update_header_selectors()
+        self._update_sheets_badge() # Update sheets badge after UI is built
+        
+        # Check first-time setup
+        self._check_first_time_setup()
     
     def build_monitor_tab(self) -> ft.Container:
         """Build the real-time monitor tab."""
@@ -368,57 +445,32 @@ class HearingApp:
     def build_settings_tab(self) -> ft.Container:
         """Build the settings tab with Profile Management."""
         
-        # --- Section 0: Global Settings (Store) ---
-        self.store_dropdown = ft.Dropdown(
-            label="操作店別",
-            options=[ft.dropdown.Option(key=k, text=k) for k in self.store_options.keys()],
-            # Initialize with loaded config store_id
-            value=self.config.get("store_id") if self.config.get("store_id") else "不切換 (使用預設)",
-            on_change=self._save_global_store, # New handler
-            prefix_icon=ft.Icons.STORE,
-            text_size=16,
-        )
-
-        # --- Section 1: Profile Selection ---
-        profile_options = [ft.dropdown.Option(key=name, text=name) for name in self.profiles.keys()]
         
-        dropdown_hint = "請選擇要使用的身份..."
-        if not self.profiles:
-            dropdown_hint = "未偵測到帳號，請先新增"
+        # --- Section 2A: Add New Account ---
 
-        self.profile_dropdown = ft.Dropdown(
-            label="📋 選擇帳號 (切換身份)",
-            hint_text=dropdown_hint,
-            options=profile_options,
-            value=self.active_profile_name,
-            on_change=self._on_profile_select,
-            prefix_icon=ft.Icons.SWITCH_ACCOUNT,
-            text_size=16,
-        )
-
-        # --- Section 2: Profile Editing ---
-        self.profile_name_field = ft.TextField(
+        # --- Section 2A: Add New Account ---
+        self.add_profile_name_field = ft.TextField(
             label="👤 使用者名稱 (例如: 王小明)",
             hint_text="輸入自定義名稱以供識別",
             prefix_icon=ft.Icons.BADGE,
         )
         
-        self.username_field = ft.TextField(
+        self.add_username_field = ft.TextField(
             label="CRM 帳號 (工號)",
             prefix_icon=ft.Icons.PERSON,
         )
         
-        self.password_field = ft.TextField(
+        self.add_password_field = ft.TextField(
             label="CRM 密碼",
             password=True,
             can_reveal_password=True,
             prefix_icon=ft.Icons.LOCK,
         )
 
-        self.save_profile_btn = ft.ElevatedButton(
-            "💾 新增 / 更新帳號",
-            icon=ft.Icons.SAVE,
-            on_click=self._save_profile,
+        self.add_profile_btn = ft.ElevatedButton(
+            "➕ 新增帳號",
+            icon=ft.Icons.ADD,
+            on_click=self._add_new_profile,
             style=ft.ButtonStyle(
                 color=ft.Colors.WHITE,
                 bgcolor=ft.Colors.GREEN,
@@ -426,34 +478,146 @@ class HearingApp:
             )
         )
         
-        # Initialize fields if active profile exists
-        if self.active_profile_name:
-            self._fill_profile_fields(self.active_profile_name)
+        # --- Section 2B: Edit Existing Account (Collapsible) ---
+        self.editing_profile_name = None  # Track which profile is being edited
+        
+        self.edit_profile_name_field = ft.TextField(
+            label="👤 使用者名稱",
+            prefix_icon=ft.Icons.BADGE,
+            read_only=True,  # Name cannot be changed
+            bgcolor=ft.Colors.GREY_800,
+        )
+        
+        self.edit_username_field = ft.TextField(
+            label="CRM 帳號 (工號)",
+            prefix_icon=ft.Icons.PERSON,
+        )
+        
+        self.edit_password_field = ft.TextField(
+            label="CRM 密碼",
+            password=True,
+            can_reveal_password=True,
+            prefix_icon=ft.Icons.LOCK,
+        )
+        
+        self.cancel_edit_btn = ft.TextButton(
+            "取消",
+            icon=ft.Icons.CLOSE,
+            on_click=self._cancel_edit,
+        )
+
+        self.save_edit_btn = ft.ElevatedButton(
+            "💾 儲存變更",
+            icon=ft.Icons.SAVE,
+            on_click=self._save_edit_profile,
+            style=ft.ButtonStyle(
+                color=ft.Colors.WHITE,
+                bgcolor=ft.Colors.BLUE,
+                padding=15,
+            )
+        )
+        
+        # Collapsible edit section container
+        self.edit_section = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.EDIT, color=ft.Colors.ORANGE),
+                    ft.Text("編輯帳號", size=16, weight=ft.FontWeight.BOLD),
+                ]),
+                ft.Divider(),
+                self.edit_profile_name_field,
+                self.edit_username_field,
+                self.edit_password_field,
+                ft.Container(height=10),
+                ft.Row([
+                    self.cancel_edit_btn,
+                    ft.Container(expand=True),
+                    self.save_edit_btn,
+                ]),
+            ], spacing=12),
+            padding=20,
+            border=ft.border.all(2, ft.Colors.ORANGE),
+            border_radius=10,
+            bgcolor=ft.Colors.GREY_900,
+            visible=False,  # Hidden by default
+        )
+        
+        # Keep old fields for compatibility but they won't be used in UI
+        self.profile_name_field = self.add_profile_name_field
+        self.username_field = self.add_username_field
+        self.password_field = self.add_password_field
+        self.save_profile_btn = self.add_profile_btn
+        
+        # --- Section 3: Google Sheets Integration ---
+        self.sheets_url_field = ft.TextField(
+            label="試算表網址 (Google Sheets URL)",
+            hint_text="貼上試算表的網址",
+            prefix_icon=ft.Icons.LINK,
+            value=self.config.get("spreadsheet_url", ""),
+        )
+        
+        # Worksheet dropdown (initially empty)
+        self.sheets_worksheet_dropdown = ft.Dropdown(
+            label="選擇工作表",
+            options=[],
+            prefix_icon=ft.Icons.TABLE_VIEW,
+            visible=False,  # Hidden until worksheets are loaded
+        )
+        
+        self.detect_worksheets_btn = ft.ElevatedButton(
+            "🔍 偵測工作表",
+            icon=ft.Icons.SEARCH,
+            on_click=self._detect_worksheets,
+            style=ft.ButtonStyle(
+                color=ft.Colors.WHITE,
+                bgcolor=ft.Colors.ORANGE,
+                padding=15,
+            )
+        )
+        
+        self.save_sheets_btn = ft.ElevatedButton(
+            "🔗 綁定試算表",
+            icon=ft.Icons.LINK,
+            on_click=self._save_sheets_config,
+            visible=False,  # Hidden until worksheet is selected
+            style=ft.ButtonStyle(
+                color=ft.Colors.WHITE,
+                bgcolor=ft.Colors.BLUE,
+                padding=15,
+            )
+        )
+        
+        # Status text for binding
+        current_sheet = self.config.get("sheet_name", "")
+        current_id = self.config.get("spreadsheet_id", "")
+        current_title = self.config.get("spreadsheet_title", "")
+        status_msg = f"✅ 已綁定: {current_title} ({current_sheet})" if current_id and current_sheet else "💡 尚未綁定試算表"
+        self.sheets_status_text = ft.Text(status_msg, size=12, color=ft.Colors.GREY)
+        
+        # If already bound, show worksheet dropdown and save button initialized
+        if current_id and current_sheet:
+            # Add the saved sheet as an option so it displays correctly
+            self.sheets_worksheet_dropdown.options = [ft.dropdown.Option(current_sheet)]
+            self.sheets_worksheet_dropdown.value = current_sheet
+            self.sheets_worksheet_dropdown.visible = True
+            self.save_sheets_btn.visible = True
+        
+
         
         return ft.Container(
             content=ft.Column([
-                # Card 0: Global Environment
+                # Card 1: Account List
                 ft.Card(
                     content=ft.Container(
                         content=ft.Column([
-                            ft.Text("🏢 店別選擇設定", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200),
-                            self.store_dropdown,
-                            ft.Text("💡 此設定為全域共用，切換帳號時不會改變。", size=12, color=ft.Colors.GREY),
-                        ], spacing=10),
-                        padding=20,
-                    ),
-                    color=ft.Colors.GREY_900,
-                ),
-                
-                ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-
-                # Card 1: Select Profile
-                ft.Card(
-                    content=ft.Container(
-                        content=ft.Column([
-                            ft.Text("👤 身分切換", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200),
-                            self.profile_dropdown,
-                            ft.Text("💡 選擇後，系統將自動使用該帳號密碼進行作業。", size=12, color=ft.Colors.GREY),
+                            ft.Row([
+                                ft.Icon(ft.Icons.PEOPLE, color=ft.Colors.CYAN),
+                                ft.Text("已儲存的帳號", size=18, weight=ft.FontWeight.BOLD),
+                            ]),
+                            ft.Divider(),
+                            self._build_account_list(),
+                            # Collapsible Edit Section (below account list)
+                            self.edit_section,
                         ], spacing=10),
                         padding=20,
                     ),
@@ -462,114 +626,334 @@ class HearingApp:
                 
                 ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
                 
-                # Card 2: Edit/Create Profile
+                # Card 2: Add New Account
                 ft.Card(
                     content=ft.Container(
                         content=ft.Column([
                             ft.Row([
-                                ft.Icon(ft.Icons.EDIT_SQUARE, color=ft.Colors.ORANGE),
-                                ft.Text("新增 / 編輯帳號資料", size=18, weight=ft.FontWeight.BOLD),
+                                ft.Icon(ft.Icons.PERSON_ADD, color=ft.Colors.GREEN),
+                                ft.Text("新增帳號", size=18, weight=ft.FontWeight.BOLD),
                             ]),
                             ft.Divider(),
-                            self.profile_name_field,
-                            self.username_field,
-                            self.password_field,
-                            # Store and URL removed from here
+                            self.add_profile_name_field,
+                            self.add_username_field,
+                            self.add_password_field,
                             ft.Container(height=10),
-                            self.save_profile_btn,
+                            self.add_profile_btn,
                         ], spacing=15),
                         padding=30,
                     ),
+                ),
+                
+                ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                
+                # Card 3: Google Sheets Integration
+                ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Row([
+                                ft.Icon(ft.Icons.TABLE_CHART, color=ft.Colors.GREEN),
+                                ft.Text("Google 試算表整合", size=18, weight=ft.FontWeight.BOLD),
+                            ]),
+                            ft.Divider(),
+                            # Service Account Email Display
+                            ft.Text("機器人 Email (請將此 Email 加入試算表的編輯者):", size=12, color=ft.Colors.GREY),
+                            ft.Row([
+                                ft.Text(
+                                    get_service_account_email() or "⚠️ 尚未設定 credentials.json",
+                                    size=13,
+                                    selectable=True,
+                                    color=ft.Colors.CYAN if get_service_account_email() else ft.Colors.ORANGE,
+                                ),
+                                ft.IconButton(
+                                    ft.Icons.COPY,
+                                    tooltip="複製 Email",
+                                    on_click=self._copy_service_email,
+                                ),
+                            ]),
+                            ft.Container(height=10),
+                            # Step 1: Spreadsheet URL Input
+                            self.sheets_url_field,
+                            ft.Container(height=5),
+                            # Step 2: Detect Worksheets
+                            self.detect_worksheets_btn,
+                            ft.Container(height=10),
+                            # Step 3: Select Worksheet
+                            self.sheets_worksheet_dropdown,
+                            ft.Container(height=10),
+                            # Step 4: Bind
+                            self.save_sheets_btn,
+                            ft.Container(height=10),
+                            # Status display
+                            self.sheets_status_text,
+                        ], spacing=10),
+                        padding=30,
+                    ),
+                    color=ft.Colors.GREY_900,
                 ),
             ], scroll=ft.ScrollMode.AUTO),
             padding=20,
             expand=True,
         )
     
-    def _fill_profile_fields(self, profile_name):
-        """Fill editing fields with profile data."""
-        if profile_name in self.profiles:
-            p = self.profiles[profile_name]
-            self.profile_name_field.value = profile_name
-            self.username_field.value = p.get("username", "")
-            self.password_field.value = _decode_password(p.get("password", ""))
-            # Store ID is no longer per-profile
+    def _build_account_list(self):
+        """Build a list of saved accounts for display in settings."""
+        self.account_list_container = ft.Column(spacing=8)
+        self._refresh_account_list()
+        return self.account_list_container
     
-    def _save_global_store(self, e):
-        """Save the global store setting."""
-        store = self.store_dropdown.value
-        self.config["store_id"] = store
-        self._update_user_info_bar()
-        self._save_config_file()
-    
-    def _on_profile_select(self, e):
-        """Handle profile selection."""
-        name = self.profile_dropdown.value
-        if name and name in self.profiles:
-            self.active_profile_name = name
+    def _refresh_account_list(self):
+        """Refresh the account list display."""
+        if not hasattr(self, 'account_list_container'):
+            return
             
-            # 1. Fill fields
-            self._fill_profile_fields(name)
+        self.account_list_container.controls.clear()
+        
+        if not self.profiles:
+            self.account_list_container.controls.append(
+                ft.Text("尚未儲存任何帳號", size=13, color=ft.Colors.GREY, italic=True)
+            )
+        else:
+            for name, profile in self.profiles.items():
+                is_active = name == self.active_profile_name
+                self.account_list_container.controls.append(
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Icon(
+                                ft.Icons.RADIO_BUTTON_CHECKED if is_active else ft.Icons.RADIO_BUTTON_UNCHECKED,
+                                color=ft.Colors.GREEN if is_active else ft.Colors.GREY,
+                                size=20,
+                            ),
+                            ft.Column([
+                                ft.Text(name, size=14, weight=ft.FontWeight.BOLD if is_active else None),
+                                ft.Text(f"帳號: {profile.get('username', '')}", size=11, color=ft.Colors.GREY),
+                            ], spacing=2, expand=True),
+                            ft.IconButton(
+                                ft.Icons.EDIT,
+                                icon_size=18,
+                                tooltip="編輯",
+                                on_click=lambda e, n=name: self._edit_account(n),
+                            ),
+                            ft.IconButton(
+                                ft.Icons.DELETE,
+                                icon_size=18,
+                                icon_color=ft.Colors.RED_400,
+                                tooltip="刪除",
+                                on_click=lambda e, n=name: self._delete_account(n),
+                            ),
+                        ], alignment=ft.MainAxisAlignment.START),
+                        padding=ft.padding.symmetric(horizontal=10, vertical=8),
+                        border_radius=8,
+                        bgcolor=ft.Colors.GREEN_900 if is_active else ft.Colors.GREY_800,
+                        border=ft.border.all(1, ft.Colors.GREEN if is_active else ft.Colors.GREY_700),
+                    )
+                )
+        
+        try:
             self.page.update()
-            
-            # 2. Update Active Config
-            p = self.profiles[name]
-            self.config["username"] = p.get("username", "")
-            self.config["password"] = _decode_password(p.get("password", ""))
-            # Do NOT update store_id from profile
-            
-            # 3. Update Header
-            self._update_user_info_bar()
-            
-            # 4. Save "Last Active" choice
-            self._save_config_file()
+        except:
+            pass
+    
+    def _edit_account(self, profile_name):
+        """Load account into edit fields."""
+        self._fill_profile_fields(profile_name)
+        self.page.update()
+        self.page.open(ft.SnackBar(ft.Text(f"正在編輯: {profile_name}")))
+    
+    def _delete_account(self, profile_name):
+        """Delete an account with confirmation."""
+        def confirm_delete(e):
+            self.page.close(dlg)
+            if profile_name in self.profiles:
+                del self.profiles[profile_name]
+                if self.active_profile_name == profile_name:
+                    self.active_profile_name = None
+                    self.config["username"] = ""
+                    self.config["password"] = ""
+                self._save_config_file()
+                self._refresh_account_list()
+                self._update_header_selectors()
+                self.page.open(ft.SnackBar(ft.Text(f"✅ 已刪除: {profile_name}")))
+        
+        def cancel(e):
+            self.page.close(dlg)
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("確認刪除"),
+            content=ft.Text(f"確定要刪除帳號「{profile_name}」嗎？此操作無法復原。"),
+            actions=[
+                ft.TextButton("取消", on_click=cancel),
+                ft.ElevatedButton("刪除", on_click=confirm_delete, 
+                                 style=ft.ButtonStyle(bgcolor=ft.Colors.RED, color=ft.Colors.WHITE)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
+    
 
-
-    def _save_profile(self, e):
-        """Save or create a profile."""
-        name = self.profile_name_field.value
-        username = self.username_field.value
-        password = self.password_field.value
-        # Store is global, not part of profile saving
+    
+    def _copy_service_email(self, e):
+        """Copy Service Account email to clipboard."""
+        email = get_service_account_email()
+        if email:
+            self.page.set_clipboard(email)
+            self.page.open(ft.SnackBar(ft.Text(f"✅ 已複製: {email}")))
+        else:
+            self.page.open(ft.SnackBar(ft.Text("⚠️ 尚未設定 credentials.json")))
+    
+    def _detect_worksheets(self, e):
+        """Detect worksheets from the spreadsheet URL."""
+        url = self.sheets_url_field.value
+        if not url:
+            self.page.open(ft.SnackBar(ft.Text("⚠️ 請輸入試算表網址")))
+            return
+        
+        spreadsheet_id = extract_spreadsheet_id(url)
+        if not spreadsheet_id:
+            self.page.open(ft.SnackBar(ft.Text("❌ 無效的試算表網址")))
+            return
+        
+        self.page.open(ft.SnackBar(ft.Text("🔍 正在偵測工作表...")))
+        
+        worksheets = list_worksheets(spreadsheet_id)
+        if not worksheets:
+            self.page.open(ft.SnackBar(ft.Text("❌ 無法取得工作表，請確認權限設定")))
+            return
+        
+        # Update dropdown options
+        self.sheets_worksheet_dropdown.options = [ft.dropdown.Option(ws) for ws in worksheets]
+        self.sheets_worksheet_dropdown.value = worksheets[0]  # Default to first
+        self.sheets_worksheet_dropdown.visible = True
+        self.save_sheets_btn.visible = True
+        self.page.update()
+        
+        self.page.open(ft.SnackBar(ft.Text(f"✅ 找到 {len(worksheets)} 個工作表")))
+    
+    def _save_sheets_config(self, e):
+        """Save Google Sheets configuration."""
+        url = self.sheets_url_field.value
+        if not url:
+            self.page.open(ft.SnackBar(ft.Text("⚠️ 請輸入試算表網址")))
+            return
+        
+        spreadsheet_id = extract_spreadsheet_id(url)
+        if not spreadsheet_id:
+            self.page.open(ft.SnackBar(ft.Text("❌ 無效的試算表網址")))
+            return
+        
+        sheet_name = self.sheets_worksheet_dropdown.value
+        if not sheet_name:
+            self.page.open(ft.SnackBar(ft.Text("⚠️ 請選擇工作表")))
+            return
+        
+        self.config["spreadsheet_url"] = url
+        self.config["spreadsheet_id"] = spreadsheet_id
+        self.config["sheet_name"] = sheet_name
+        
+        # Fetch and save spreadsheet name
+        spreadsheet_title = get_spreadsheet_name(spreadsheet_id)
+        if spreadsheet_title:
+            self.config["spreadsheet_title"] = spreadsheet_title
+            self.log(f"📄 試算表名稱: {spreadsheet_title}")
+        else:
+            self.config["spreadsheet_title"] = "" # Clear if not found
+            
+        self._save_config_file()
+        
+        # Update status text and header badge
+        current_title = self.config.get("spreadsheet_title", "")
+        self.sheets_status_text.value = f"✅ 已綁定: {current_title} ({sheet_name})" if current_title else f"✅ 已綁定: {sheet_name}"
+        self._update_sheets_badge()
+        self.page.update()
+        
+        self.page.open(ft.SnackBar(ft.Text(f"✅ 已綁定: {sheet_name}")))
+        self.log(f"📊 綁定 Google Sheets: {spreadsheet_id} / {sheet_name}")
+    
+    def _add_new_profile(self, e):
+        """Create a new profile."""
+        name = self.add_profile_name_field.value
+        username = self.add_username_field.value
+        password = self.add_password_field.value
         
         # Validation
         if not name or len(name) < 2:
             self.page.open(ft.SnackBar(ft.Text("⚠️ 請輸入有效的「使用者名稱」！"), bgcolor=ft.Colors.RED))
             return
+        if name in self.profiles:
+            self.page.open(ft.SnackBar(ft.Text("⚠️ 此使用者名稱已存在！"), bgcolor=ft.Colors.RED))
+            return
         if not username or not password:
             self.page.open(ft.SnackBar(ft.Text("⚠️ 帳號或密碼不能為空！"), bgcolor=ft.Colors.RED))
             return
 
-        # Save to profiles
+        # Save new profile
         self.profiles[name] = {
             "username": username,
             "password": _encode_password(password)
-            # No store_id
         }
         
-        # Update dropdown options
-        self.profile_dropdown.options = [ft.dropdown.Option(key=n, text=n) for n in self.profiles.keys()]
-        self.profile_dropdown.value = name
-        self.active_profile_name = name
+        # Clear add fields
+        self.add_profile_name_field.value = ""
+        self.add_username_field.value = ""
+        self.add_password_field.value = ""
         
-        # Update active config immediately
-        self.config["username"] = username
-        self.config["password"] = password
-        # Store is independent
-        
+        # Refresh UI
+        self._refresh_account_list()
         self.page.update()
-        self._update_user_info_bar()
-        self.page.open(ft.SnackBar(ft.Text(f"✅ 已儲存個人檔案: {name}"), bgcolor=ft.Colors.GREEN))
         
-        # Persist to file
+        self.page.open(ft.SnackBar(ft.Text(f"✅ 已新增帳號: {name}"), bgcolor=ft.Colors.GREEN))
         self._save_config_file()
+
+    def _edit_account(self, profile_name):
+        """Open edit section for a profile."""
+        self.editing_profile_name = profile_name
+        p = self.profiles[profile_name]
         
+        # Fill edit fields
+        self.edit_profile_name_field.value = profile_name
+        self.edit_username_field.value = p.get("username", "")
+        self.edit_password_field.value = _decode_password(p.get("password", ""))
+        
+        # Show edit section
+        self.edit_section.visible = True
         self.page.update()
-        self._update_user_info_bar()
-        self.page.open(ft.SnackBar(ft.Text(f"✅ 已儲存個人檔案: {name}"), bgcolor=ft.Colors.GREEN))
+
+    def _save_edit_profile(self, e):
+        """Save changes to the editing profile."""
+        name = self.editing_profile_name
+        if not name or name not in self.profiles:
+            return
+            
+        username = self.edit_username_field.value
+        password = self.edit_password_field.value
         
-        # Persist to file
+        if not username or not password:
+            self.page.open(ft.SnackBar(ft.Text("⚠️ 帳號或密碼不能為空！"), bgcolor=ft.Colors.RED))
+            return
+            
+        # Update profile data
+        self.profiles[name]["username"] = username
+        self.profiles[name]["password"] = _encode_password(password)
+        
+        # If this is the active profile, treat it as a live update
+        if self.active_profile_name == name:
+            self.config["username"] = username
+            self.config["password"] = password
+            self._update_header_selectors()
+            
+        # Hide edit section and refresh list
+        self.edit_section.visible = False
+        self._refresh_account_list()
+        self.page.update()
+        
+        self.page.open(ft.SnackBar(ft.Text(f"✅ 已更新帳號: {name}"), bgcolor=ft.Colors.GREEN))
         self._save_config_file()
+
+    def _cancel_edit(self, e):
+        """Cancel editing."""
+        self.edit_section.visible = False
+        self.page.update()
 
     def _save_config_file(self):
         """Helper to save config to disk."""
@@ -580,20 +964,285 @@ class HearingApp:
                 "last_folder": self.watch_path,
                 # Legacy fields (optional, can keep for safety)
                 "last_username": self.config["username"],
-                "last_store": self.config["store_id"]
+                "last_store": self.config["store_id"],
+                # Google Sheets config
+                "spreadsheet_url": self.config.get("spreadsheet_url", ""),
+                "spreadsheet_id": self.config.get("spreadsheet_id", ""),
+                "sheet_name": self.config.get("sheet_name", ""),
+                "spreadsheet_title": self.config.get("spreadsheet_title", ""),
             }
             save_config(config_data)
         except Exception as ex:
             print(f"[Config] Save error: {ex}")
 
-    def _update_user_info_bar(self, e=None):
-        """Update the user info bar with current settings."""
+    def _update_header_selectors(self, e=None):
+        """Update the header bar dropdown displays."""
         try:
-            self.user_info_account.value = f"帳號: {self.username_field.value}"
-            self.user_info_store.value = f"店別: {self.store_dropdown.value}"
+            # Update account display
+            account_name = self.active_profile_name or "未選擇"
+            self.header_account_text.value = f"👤 {account_name}"
+            
+            # Update store display
+            store_name = self.config.get("store_id") or "不切換"
+            self.header_store_text.value = f"🏪 {store_name}"
+            
             self.page.update()
         except:
             pass  # Ignore if called before UI is fully built
+    
+    def _show_account_menu(self, e):
+        """Show account selection popup menu."""
+        items = []
+        
+        # Add existing profiles
+        for name in self.profiles.keys():
+            is_current = name == self.active_profile_name
+            items.append(
+                ft.PopupMenuItem(
+                    text=f"{'✓ ' if is_current else '   '}{name}",
+                    on_click=lambda e, n=name: self._select_account(n),
+                )
+            )
+        
+        if items:
+            items.append(ft.PopupMenuItem())  # Divider
+        
+        # Add new account option
+        items.append(
+            ft.PopupMenuItem(
+                text="➕ 新增帳號...",
+                on_click=lambda e: self._go_to_settings_for_new_account(),
+            )
+        )
+        
+        # Create and show menu
+        menu = ft.PopupMenuButton(
+            items=items,
+            data="account_menu",
+        )
+        
+        # Use BottomSheet as alternative since PopupMenu needs different approach
+        self._show_popup_at(e, items, "選擇帳號")
+    
+    def _show_store_menu(self, e):
+        """Show store selection popup menu."""
+        items = []
+        current_store = self.config.get("store_id", "")
+        
+        for store_name in self.store_options.keys():
+            is_current = store_name == current_store
+            items.append(
+                ft.PopupMenuItem(
+                    text=f"{'✓ ' if is_current else '   '}{store_name}",
+                    on_click=lambda e, s=store_name: self._select_store(s),
+                )
+            )
+        
+        self._show_popup_at(e, items, "選擇門市")
+    
+    def _show_popup_at(self, e, items, title):
+        """Show a bottom sheet menu for selection."""
+        def close_sheet(e):
+            self.page.close(bs)
+        
+        def item_click(handler):
+            def wrapper(e):
+                self.page.close(bs)
+                handler(e)
+            return wrapper
+        
+        # Build menu items
+        menu_items = []
+        for item in items:
+            if item.text:
+                menu_items.append(
+                    ft.ListTile(
+                        title=ft.Text(item.text, size=14),
+                        on_click=item_click(item.on_click) if item.on_click else None,
+                    )
+                )
+        
+        bs = ft.BottomSheet(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
+                        ft.Container(expand=True),
+                        ft.IconButton(ft.Icons.CLOSE, on_click=close_sheet),
+                    ]),
+                    ft.Divider(),
+                    *menu_items,
+                ], spacing=0, tight=True),
+                padding=20,
+            ),
+        )
+        self.page.open(bs)
+    
+    def _select_account(self, profile_name):
+        """Select an account from the header menu."""
+        if profile_name in self.profiles:
+            self.active_profile_name = profile_name
+            p = self.profiles[profile_name]
+            self.config["username"] = p.get("username", "")
+            self.config["password"] = _decode_password(p.get("password", ""))
+            
+            self._update_header_selectors()
+            self._save_config_file()
+            self._refresh_account_list()
+            self.page.open(ft.SnackBar(ft.Text(f"✅ 已切換至: {profile_name}")))
+    
+    def _select_store(self, store_name):
+        """Select a store from the header menu."""
+        self.config["store_id"] = store_name
+        self._update_header_selectors()
+        self._save_config_file()
+        self.page.open(ft.SnackBar(ft.Text(f"✅ 門市: {store_name}")))
+    
+    def _go_to_settings_for_new_account(self):
+        """Navigate to settings tab to add new account."""
+        self.tabs.selected_index = 1
+        self.page.update()
+    
+    def _update_status(self, status: str, icon: str = None, color = None):
+        """Update the status indicator.
+        
+        Args:
+            status: Status text (未啟動, 監控中, 處理中, 錯誤)
+            icon: Icon name (optional, auto-selected based on status)
+            color: Color (optional, auto-selected based on status)
+        """
+        status_map = {
+            "未啟動": (ft.Icons.STOP_CIRCLE, ft.Colors.GREY),
+            "監控中": (ft.Icons.PLAY_CIRCLE, ft.Colors.GREEN),
+            "處理中": (ft.Icons.SYNC, ft.Colors.BLUE),
+            "錯誤": (ft.Icons.ERROR, ft.Colors.RED),
+        }
+        
+        icon_name, status_color = status_map.get(status, (ft.Icons.HELP, ft.Colors.GREY))
+        if icon:
+            icon_name = icon
+        if color:
+            status_color = color
+        
+        self.status_icon.name = icon_name
+        self.status_icon.color = status_color
+        self.status_text.value = status
+        self.status_text.color = status_color
+        self.status_container.bgcolor = ft.Colors.with_opacity(0.15, status_color)
+        self.page.update()
+    
+    def _update_sheets_badge(self):
+        """Update the Google Sheets status badge."""
+        if not hasattr(self, 'header_sheets_status'):
+            return
+            
+        sheets_bound = bool(self.config.get("spreadsheet_id") and self.config.get("sheet_name"))
+        sheet_name = self.config.get("sheet_name", "")
+        spreadsheet_title = self.config.get("spreadsheet_title", "")
+        
+        # Display: Title (Sheet Name) if title exists, else just Sheet Name
+        display_text = f"{spreadsheet_title} ({sheet_name})" if spreadsheet_title else sheet_name
+        
+        # Update badge content
+        # Structure: Container -> Row -> [Icon, Text]
+        row = self.header_sheets_status.content
+        if len(row.controls) >= 2:
+            # Icon
+            row.controls[0].name = ft.Icons.CHECK_CIRCLE if sheets_bound else ft.Icons.WARNING
+            row.controls[0].color = ft.Colors.GREEN if sheets_bound else ft.Colors.ORANGE
+            # Text
+            row.controls[1].value = f"📊 {display_text}" if sheets_bound else "📊 未綁定"
+            row.controls[1].color = ft.Colors.GREEN if sheets_bound else ft.Colors.ORANGE
+        
+        # Container style
+        self.header_sheets_status.bgcolor = ft.Colors.with_opacity(0.2, ft.Colors.GREEN if sheets_bound else ft.Colors.ORANGE)
+        self.header_sheets_status.tooltip = f"已綁定: {display_text}" if sheets_bound else "Google Sheets 尚未綁定"
+        
+        self.page.update()
+    
+    def _check_first_time_setup(self):
+        """Check if first-time setup is needed and show guide dialog."""
+        has_account = bool(self.config.get("username"))
+        has_store = bool(self.config.get("store_id"))
+        has_sheets = bool(self.config.get("spreadsheet_id"))
+        
+        # If no account configured, show first-time setup dialog
+        if not has_account:
+            self._show_first_time_dialog()
+    
+    def _show_first_time_dialog(self):
+        """Show first-time setup guidance dialog."""
+        has_account = bool(self.config.get("username"))
+        has_store = bool(self.config.get("store_id"))
+        has_sheets = bool(self.config.get("spreadsheet_id"))
+        
+        def go_to_settings(e):
+            self.page.close(dlg)
+            self.tabs.selected_index = 1  # Switch to settings tab
+            self.page.update()
+        
+        def close_dialog(e):
+            self.page.close(dlg)
+        
+        # Build checklist
+        checklist = ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.CHECK_CIRCLE if has_account else ft.Icons.CIRCLE_OUTLINED, 
+                       color=ft.Colors.GREEN if has_account else ft.Colors.GREY, size=20),
+                ft.Text("新增登入帳號", 
+                       color=ft.Colors.WHITE if not has_account else ft.Colors.GREY_500,
+                       weight=ft.FontWeight.BOLD if not has_account else None),
+                ft.Text("(必要)", size=11, color=ft.Colors.RED if not has_account else ft.Colors.GREY),
+            ], spacing=10),
+            ft.Row([
+                ft.Icon(ft.Icons.CHECK_CIRCLE if has_store else ft.Icons.CIRCLE_OUTLINED, 
+                       color=ft.Colors.GREEN if has_store else ft.Colors.GREY, size=20),
+                ft.Text("選擇門市", 
+                       color=ft.Colors.WHITE if not has_store else ft.Colors.GREY_500),
+                ft.Text("(建議)", size=11, color=ft.Colors.ORANGE if not has_store else ft.Colors.GREY),
+            ], spacing=10),
+            ft.Row([
+                ft.Icon(ft.Icons.CHECK_CIRCLE if has_sheets else ft.Icons.CIRCLE_OUTLINED, 
+                       color=ft.Colors.GREEN if has_sheets else ft.Colors.GREY, size=20),
+                ft.Text("綁定 Google 試算表", 
+                       color=ft.Colors.WHITE if not has_sheets else ft.Colors.GREY_500),
+                ft.Text("(選填)", size=11, color=ft.Colors.GREY),
+            ], spacing=10),
+        ], spacing=12)
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([
+                ft.Icon(ft.Icons.ROCKET_LAUNCH, color=ft.Colors.BLUE, size=28),
+                ft.Text("🎉 歡迎使用", size=20, weight=ft.FontWeight.BOLD),
+            ], spacing=10),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text("為了開始使用自動化功能，請先完成以下設定：", size=14),
+                    ft.Container(height=10),
+                    checklist,
+                    ft.Container(height=10),
+                    ft.Container(
+                        content=ft.Text("💡 完成設定後即可開始自動處理聽力報告！", size=12, color=ft.Colors.CYAN),
+                        padding=10,
+                        border_radius=8,
+                        bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.CYAN),
+                    ),
+                ], spacing=5),
+                width=350,
+            ),
+            actions=[
+                ft.TextButton("稍後設定", on_click=close_dialog),
+                ft.ElevatedButton(
+                    "前往設定",
+                    icon=ft.Icons.SETTINGS,
+                    on_click=go_to_settings,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
     
     def log(self, message: str):
         """Add message to log."""
@@ -655,9 +1304,7 @@ class HearingApp:
             self.monitoring = True
             self.monitor_btn.text = "⏹️ 停止監控"
             self.monitor_btn.style.bgcolor = ft.Colors.RED
-            self.status_chip.label.value = "監控中..."
-            self.status_chip.leading.name = ft.Icons.RADIO_BUTTON_CHECKED
-            self.status_chip.leading.color = ft.Colors.GREEN
+            self._update_status("監控中")
             
             handler = XMLFileHandler(self._safe_on_new_file)
             self.observer = Observer()
@@ -674,6 +1321,7 @@ class HearingApp:
             self.page.update()
         except Exception as e:
             self.monitoring = False # Reset state
+            self._update_status("錯誤")
             self.log(f"❌ 啟動監控失敗: {e}")
             self.page.open(ft.SnackBar(ft.Text(f"啟動失敗: {e}")))
             self.page.update()
@@ -838,9 +1486,7 @@ class HearingApp:
         self.monitoring = False
         self.monitor_btn.text = "▶️ 開始監控"
         self.monitor_btn.style.bgcolor = ft.Colors.BLUE
-        self.status_chip.label.value = "已停止"
-        self.status_chip.leading.name = ft.Icons.STOP_CIRCLE
-        self.status_chip.leading.color = ft.Colors.GREY
+        self._update_status("未啟動")
         
         if self.observer:
             self.observer.stop()
@@ -926,6 +1572,9 @@ class HearingApp:
             self.page.open(ft.SnackBar(ft.Text(f"錯誤: {ex}")))
             return
         
+        # Add spreadsheet_id to session_info for wizard
+        session_info["spreadsheet_id"] = self.config.get("spreadsheet_id", "")
+        
         # Create wizard dialog
         wizard = SessionWizard(self.page, session_info, self.on_wizard_complete)
         wizard.open()
@@ -958,11 +1607,45 @@ class HearingApp:
         selected_data = self._merge_session_data(sessions, result)
         
         # Run automation in background thread
+        # Run automation in background thread
         self.log("🚀 開始處理...")
+        
+        # 1. Create Progress Dialog
+        self.progress_text = ft.Text("正在初始化...", size=16)
+        self.progress_bar = ft.ProgressBar(width=300, color=ft.Colors.BLUE)
+        
+        self.progress_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([ft.ProgressRing(width=20, height=20, stroke_width=2), ft.Text(" 自動化處理中...")]),
+            content=ft.Container(
+                content=ft.Column([
+                    self.progress_text,
+                    ft.Container(height=10),
+                    self.progress_bar,
+                    ft.Container(height=5),
+                    ft.Text("請勿關閉視窗，這可能需要幾秒鐘...", size=12, color=ft.Colors.GREY),
+                ], tight=True),
+                height=100,
+                width=350,
+            ),
+            actions=[],
+        )
+        self.page.open(self.progress_dialog)
+        self.page.update()
+        
+        # 2. Define Callback
+        def progress_callback(msg):
+            self.page.run_task(self._update_progress_ui, msg)
+
         threading.Thread(
             target=self._run_automation,
-            args=(selected_data, self.detected_file, config, result)
+            args=(selected_data, self.detected_file, config, result, progress_callback)
         ).start()
+
+    def _update_progress_ui(self, msg):
+        """Update progress dialog text."""
+        self.progress_text.value = str(msg)
+        self.page.update()
     
     def _merge_session_data(self, sessions: List[Dict], result: Dict) -> Dict:
         """Merge selected session data with wizard results."""
@@ -978,6 +1661,8 @@ class HearingApp:
                 for key, value in session.items():
                     if key.startswith("PTA_") or key.startswith("Speech_") or key.startswith("Test"):
                         selected_data[key] = value
+                # Also add FullTestDate for Google Sheets C column
+                selected_data["FullTestDate"] = session.get("FullTestDate", "")
             
             if tymp_date and full_date == tymp_date:
                 for key, value in session.items():
@@ -1000,17 +1685,90 @@ class HearingApp:
         
         return selected_data
     
-    def _run_automation(self, payload: Dict, filepath: str, config: Dict, wizard_result: Dict):
+    def _parse_pta_value(self, value) -> Optional[float]:
+        """Parse PTA value from string (may have NR suffix) to float."""
+        if value is None:
+            return None
+        try:
+            # Remove NR suffix if present
+            str_val = str(value).replace("NR", "").strip()
+            return float(str_val)
+        except (ValueError, TypeError):
+            return None
+    
+    def _run_automation(self, payload: Dict, filepath: str, config: Dict, wizard_result: Dict, progress_callback=None):
         """Run automation in background thread."""
         try:
-            run_automation_sync(payload, filepath, config, headless=False)
-            self.page.run_task(self._on_automation_success, filepath)
+            run_automation_sync(payload, filepath, config, headless=True, progress_callback=progress_callback)
+            # Pass wizard_result and payload for sheets writing
+            self.page.run_task(self._on_automation_success, filepath, wizard_result, payload)
         except Exception as e:
             self.page.run_task(self._on_automation_error, str(e), filepath)
     
-    async def _on_automation_success(self, filepath: str = None):
+    async def _on_automation_success(self, filepath: str = None, wizard_result: Dict = None, payload: Dict = None):
         """Handle automation success."""
+        if hasattr(self, 'progress_dialog'):
+            self.page.close(self.progress_dialog)
         self.log("✅ 上傳成功!")
+        
+        # Write to Google Sheets if enabled
+        if wizard_result and wizard_result.get("write_to_sheets") and wizard_result.get("sheets_data"):
+            self.log("📊 寫入 Google 試算表...")
+            try:
+                spreadsheet_id = self.config.get("spreadsheet_id")
+                if not spreadsheet_id:
+                    self.log("⚠️ 未設定試算表 ID")
+                else:
+                    # Calculate PTA from payload
+                    # Note: Parser uses PTA_{Side}_Air_{Freq} format
+                    right_pta = calculate_pta(
+                        self._parse_pta_value(payload.get("PTA_Right_Air_500")),
+                        self._parse_pta_value(payload.get("PTA_Right_Air_1000")),
+                        self._parse_pta_value(payload.get("PTA_Right_Air_2000")),
+                        self._parse_pta_value(payload.get("PTA_Right_Air_4000")),
+                    )
+                    left_pta = calculate_pta(
+                        self._parse_pta_value(payload.get("PTA_Left_Air_500")),
+                        self._parse_pta_value(payload.get("PTA_Left_Air_1000")),
+                        self._parse_pta_value(payload.get("PTA_Left_Air_2000")),
+                        self._parse_pta_value(payload.get("PTA_Left_Air_4000")),
+                    )
+                    
+                    print(f"[DEBUG] Right PTA: {right_pta}, Left PTA: {left_pta}")
+                    
+                    # Get sheets data
+                    sheets_data = wizard_result["sheets_data"]
+                    
+                    # Build row
+                    row = build_row_data(
+                        inspector_name=wizard_result.get("inspector_name", ""),
+                        test_date=payload.get("FullTestDate", "").split("T")[0] if payload.get("FullTestDate") else "",
+                        patient_name=payload.get("Target_Patient_Name", ""),
+                        birth_date=payload.get("Patient_BirthDate", ""),
+                        phone=sheets_data.get("phone", ""),
+                        customer_source=sheets_data.get("customer_source", ""),
+                        clinic_name=sheets_data.get("clinic_name", ""),
+                        has_invitation_card=sheets_data.get("invitation_card", ""),
+                        store_code=sheets_data.get("store_code", ""),
+                        recommend_id=sheets_data.get("recommend_id", ""),
+                        voucher_count=sheets_data.get("voucher_count", ""),
+                        voucher_id=sheets_data.get("voucher_id", ""),
+                        is_deal=sheets_data.get("is_deal", ""),
+                        transaction_amount=sheets_data.get("transaction_amount", ""),
+                        right_pta=right_pta,
+                        left_pta=left_pta,
+                    )
+                    
+                    # Get sheet name from config
+                    sheet_name = self.config.get("sheet_name", "來客紀錄")
+                    
+                    success = append_row_to_sheet(spreadsheet_id, row, sheet_name)
+                    if success:
+                        self.log("✅ 已寫入試算表!")
+                    else:
+                        self.log("⚠️ 試算表寫入失敗")
+            except Exception as ex:
+                self.log(f"⚠️ 試算表錯誤: {ex}")
         
         # Remove from pending list upon success
         target = filepath or self.detected_file
@@ -1039,6 +1797,8 @@ class HearingApp:
     
     async def _on_automation_error(self, error: str, filepath: str = None):
         """Handle automation error."""
+        if hasattr(self, 'progress_dialog'):
+            self.page.close(self.progress_dialog)
         self.log(f"❌ 錯誤: {error}")
         
         # Remove from pending list (file moved to failed)
@@ -1154,6 +1914,142 @@ class SessionWizard:
             value="True",
         )
         
+        # --- Google Sheets Integration Fields ---
+        # Check if Google Sheets is configured
+        self.sheets_configured = bool(session_info.get("spreadsheet_id"))
+        
+        # Checkbox to enable writing to Google Sheets
+        self.sheets_checkbox = ft.Checkbox(
+            label="同時寫入 Google 試算表",
+            value=False,
+            on_change=self._toggle_sheets_fields,
+        )
+        
+        # Customer source options (exact 13 options from user)
+        self.customer_source_options = [
+            "門市轉介", "員工本人", "員工家屬", "門市DM/海報", "招牌", 
+            "過路客", "自邀客", "舊客轉介", "GOOGLE", "FB/LINE", 
+            "聽篩活動", "門市聽篩(蓋門市聽篩章)", "簡訊廣告"
+        ]
+        
+        # Create checkboxes for multi-select customer source
+        self.customer_source_checkboxes = {}
+        for option in self.customer_source_options:
+            self.customer_source_checkboxes[option] = ft.Checkbox(
+                label=option, 
+                value=False,
+                on_change=self._update_customer_source_display,
+            )
+        
+        # Invitation card options
+        invitation_card_options = ["有", "無"]
+        
+        # Is Deal options (T column)
+        is_deal_options = ["是", "否"]
+        
+        # Fields for Google Sheets
+        self.sheets_phone = ft.TextField(
+            label="電話",
+            prefix_icon=ft.Icons.PHONE,
+        )
+        
+        # Customer source selected display
+        self.customer_source_display = ft.TextField(
+            label="顧客來源 (可複選)",
+            read_only=True,
+            prefix_icon=ft.Icons.SOURCE,
+            hint_text="點擊選擇...",
+        )
+        
+        # Customer source popup with checkboxes
+        self.customer_source_popup = ft.PopupMenuButton(
+            icon=ft.Icons.ARROW_DROP_DOWN,
+            items=[
+                ft.PopupMenuItem(
+                    content=self.customer_source_checkboxes[opt],
+                ) for opt in self.customer_source_options
+            ],
+            tooltip="選擇顧客來源",
+        )
+        
+        # Customer source multi-select container
+        self.sheets_customer_source_container = ft.Container(
+            content=ft.Row([
+                ft.Container(self.customer_source_display, expand=True),
+                self.customer_source_popup,
+            ]),
+        )
+        
+        self.sheets_clinic_name = ft.TextField(
+            label="診所名稱 (選填)",
+            prefix_icon=ft.Icons.LOCAL_HOSPITAL,
+        )
+        self.sheets_invitation_card = ft.Dropdown(
+            label="有無邀請卡",
+            options=[ft.dropdown.Option(o) for o in invitation_card_options],
+            prefix_icon=ft.Icons.CARD_GIFTCARD,
+            on_change=self._toggle_invitation_card_fields,
+        )
+        self.sheets_is_deal = ft.Dropdown(
+            label="是否成交 (T欄)",
+            options=[ft.dropdown.Option(o) for o in is_deal_options],
+            prefix_icon=ft.Icons.HANDSHAKE,
+            on_change=self._toggle_transaction_amount,
+        )
+        
+        # Transaction Amount (U Column) - Condition on Is Deal = "是"
+        self.sheets_transaction_amount = ft.TextField(
+            label="成交金額 (U欄)",
+            prefix_icon=ft.Icons.ATTACH_MONEY,
+            visible=False,
+        )
+        
+        # Conditional fields for invitation card (K, M, R, S)
+        self.sheets_store_code = ft.TextField(
+            label="門市編號 (K欄)",
+            prefix_icon=ft.Icons.STORE,
+        )
+        self.sheets_recommend_id = ft.TextField(
+            label="推薦人工號 (M欄)",
+            prefix_icon=ft.Icons.BADGE,
+        )
+        self.sheets_voucher_count = ft.TextField(
+            label="金鑽券發放張數 (R欄)",
+            prefix_icon=ft.Icons.CONFIRMATION_NUMBER,
+        )
+        self.sheets_voucher_id = ft.TextField(
+            label="金鑽券發放編號 (S欄)",
+            prefix_icon=ft.Icons.NUMBERS,
+        )
+        
+        # Container for invitation card conditional fields (hidden by default)
+        self.invitation_card_fields_container = ft.Container(
+            content=ft.Column([
+                ft.Text("📋 邀請卡相關資料", size=12, color=ft.Colors.ORANGE),
+                self.sheets_store_code,
+                self.sheets_recommend_id,
+                self.sheets_voucher_count,
+                self.sheets_voucher_id,
+            ], spacing=10),
+            visible=False,
+        )
+        
+        # Container for sheets fields (hidden by default)
+        self.sheets_fields_container = ft.Container(
+            content=ft.Column([
+                ft.Divider(),
+                ft.Text("📊 Google 試算表額外資訊", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN),
+                self.sheets_phone,
+                self.sheets_customer_source_container,
+                self.sheets_clinic_name,
+                self.sheets_invitation_card,
+                self.invitation_card_fields_container,
+                self.sheets_is_deal,
+                self.sheets_transaction_amount,
+            ], spacing=10, scroll=ft.ScrollMode.AUTO),
+            visible=False,
+        )
+        
         self.build_dialog()
 
     def build_dialog(self):
@@ -1227,9 +2123,11 @@ class SessionWizard:
             ),
         ], spacing=15, scroll=ft.ScrollMode.AUTO)
         
-        # Page 3: Summary
+        # Page 3: Summary + Google Sheets Options
         self.summary_text = ft.Text("", size=13)
-        self.page3 = ft.Column([
+        
+        # Build page 3 content
+        page3_content = [
             ft.Text("步驟 3/3：確認並送出", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE),
             ft.Card(
                 content=ft.Container(
@@ -1237,10 +2135,27 @@ class SessionWizard:
                     padding=20,
                 ),
             ),
-        ], spacing=15)
+        ]
         
-        # Content container
-        self.content = ft.Container(content=self.page1, width=500, height=400)
+        # Add Google Sheets options if configured
+        if self.sheets_configured:
+            page3_content.append(
+                ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            self.sheets_checkbox,
+                            self.sheets_fields_container,
+                        ], spacing=10),
+                        padding=20,
+                    ),
+                    color=ft.Colors.GREY_900,
+                )
+            )
+        
+        self.page3 = ft.Column(page3_content, spacing=15, scroll=ft.ScrollMode.AUTO)
+        
+        # Content container (increased height for Google Sheets fields)
+        self.content = ft.Container(content=self.page1, width=500, height=480)
         
         # Navigation buttons
         self.prev_btn = ft.TextButton("← 上一步", on_click=self.prev_page, visible=False)
@@ -1345,6 +2260,36 @@ class SessionWizard:
             self.right_image_text.color = ft.Colors.WHITE
             self.page.update()
 
+    def _toggle_sheets_fields(self, e):
+        """Toggle visibility of Google Sheets fields when checkbox changes."""
+        self.sheets_fields_container.visible = self.sheets_checkbox.value
+        self.page.update()
+
+    def _toggle_invitation_card_fields(self, e):
+        """Toggle visibility of invitation card related fields."""
+        show_fields = self.sheets_invitation_card.value == "有"
+        self.invitation_card_fields_container.visible = show_fields
+        self.page.update()
+
+    def _toggle_transaction_amount(self, e):
+        """Toggle visibility of transaction amount field."""
+        show_fields = self.sheets_is_deal.value == "是"
+        self.sheets_transaction_amount.visible = show_fields
+        self.page.update()
+
+    def _get_selected_customer_sources(self) -> str:
+        """Get comma-separated string of selected customer sources."""
+        selected = []
+        for option, checkbox in self.customer_source_checkboxes.items():
+            if checkbox.value:
+                selected.append(option)
+        return ", ".join(selected)
+    
+    def _update_customer_source_display(self, e):
+        """Update the customer source display field when checkboxes change."""
+        self.customer_source_display.value = self._get_selected_customer_sources()
+        self.page.update()
+
     def next_page(self, e):
         """Go to next page."""
         if self.current_page == 0:
@@ -1368,7 +2313,21 @@ class SessionWizard:
                 "right_intact": self.right_intact.value,
                 "left_image": self.left_image_path,
                 "right_image": self.right_image_path,
-            }
+            },
+            # Google Sheets data
+            "write_to_sheets": self.sheets_checkbox.value if self.sheets_configured else False,
+            "sheets_data": {
+                "phone": self.sheets_phone.value or "",
+                "customer_source": self._get_selected_customer_sources(),
+                "clinic_name": self.sheets_clinic_name.value or "",
+                "invitation_card": self.sheets_invitation_card.value or "",
+                "store_code": self.sheets_store_code.value or "",
+                "recommend_id": self.sheets_recommend_id.value or "",
+                "voucher_count": self.sheets_voucher_count.value or "",
+                "voucher_id": self.sheets_voucher_id.value or "",
+                "is_deal": self.sheets_is_deal.value or "",
+                "transaction_amount": self.sheets_transaction_amount.value or "",
+            } if self.sheets_checkbox.value and self.sheets_configured else None,
         }
         self.close()
         self.on_complete(result)
