@@ -24,7 +24,7 @@ def main_entry():
         
         # Try importing and running
         import flet as ft
-        from src.gui import main
+        from src.ui import main
         ft.app(target=main)
         
     except Exception as e:
